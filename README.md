@@ -192,6 +192,12 @@ Le lint ESLint flat config est egalement verifie avec:
 pnpm lint
 ```
 
+## Deploiement production
+
+Le deploiement recommande pour un domaine Heberjahiz est un VPS/Cloud avec Docker Compose et Caddy pour HTTPS automatique.
+
+Guide detaille: [docs/deploiement-heberjahiz.md](docs/deploiement-heberjahiz.md)
+
 ## Fonctionnalites completees (v0.2)
 
 - **Settings UI** : onglets reels Societe, Jours feries, Types de conges avec formulaires CRUD.
