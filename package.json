@@ -1,0 +1,42 @@
+{
+  "name": "pointage360",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Pointage360 - plateforme SaaS multi-tenant de pointage, timesheets, conges et chantiers.",
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "lint": "turbo lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md,css,prisma,yml,yaml}\"",
+    "typecheck": "turbo typecheck",
+    "db:generate": "prisma generate --schema prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --schema prisma/schema.prisma",
+    "db:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:studio": "prisma studio --schema prisma/schema.prisma",
+    "demo:ready": "tsx prisma/demo-ready.ts",
+    "test": "pnpm run test:api && pnpm run test:e2e",
+    "test:api": "pnpm run demo:ready && tsx tests/api/run-critical.ts",
+    "test:e2e": "pnpm run demo:ready && tsx tests/e2e/run-critical.ts"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@next/eslint-plugin-next": "^15.5.18",
+    "@playwright/test": "^1.60.0",
+    "@pointage360/config": "workspace:*",
+    "@prisma/client": "^6.8.2",
+    "@typescript-eslint/eslint-plugin": "^8.48.0",
+    "@typescript-eslint/parser": "^8.48.0",
+    "bcryptjs": "^3.0.2",
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "pnpm": "9.15.4",
+    "prettier": "^3.3.3",
+    "prisma": "^6.8.2",
+    "tsx": "^4.19.4",
+    "turbo": "^2.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.48.0"
+  }
+}

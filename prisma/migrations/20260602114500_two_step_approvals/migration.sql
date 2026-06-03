@@ -1,0 +1,3 @@
+ALTER TYPE "AttendanceStatus" ADD VALUE 'N1_APPROVED';
+ALTER TYPE "TimesheetStatus" ADD VALUE 'N1_APPROVED';
+ALTER TYPE "LeaveRequestStatus" ADD VALUE 'N1_APPROVED';

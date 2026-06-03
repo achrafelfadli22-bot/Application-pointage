@@ -1,0 +1,10 @@
+{
+  "extends": "@pointage360/config/tsconfig/nest",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

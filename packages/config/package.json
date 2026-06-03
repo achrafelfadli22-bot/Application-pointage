@@ -1,0 +1,13 @@
+{
+  "name": "@pointage360/config",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./index.js",
+  "exports": {
+    "./eslint": "./eslint/index.js",
+    "./prettier": "./prettier/index.js",
+    "./tsconfig/base": "./tsconfig/base.json",
+    "./tsconfig/next": "./tsconfig/next.json",
+    "./tsconfig/nest": "./tsconfig/nest.json"
+  }
+}

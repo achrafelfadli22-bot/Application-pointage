@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: pointage360
+          POSTGRES_USER: pointage360
+          POSTGRES_PASSWORD: pointage360
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U pointage360 -d pointage360"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql://pointage360:pointage360@localhost:5432/pointage360?schema=public
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      NEXT_PUBLIC_API_URL: http://localhost:4000/api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Enable pnpm
+        run: corepack enable
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Prisma generate
+        run: pnpm db:generate
+
+      - name: Prisma migrate
+        run: pnpm db:deploy
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build

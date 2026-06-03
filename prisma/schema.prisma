@@ -1,0 +1,575 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  RESOURCE_MANAGER
+  HR
+  PROJECT_MANAGER
+  MANAGER
+  EMPLOYEE
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  SUSPENDED
+}
+
+enum SiteStatus {
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+}
+
+enum ProjectStatus {
+  ACTIVE
+  COMPLETED
+  SUSPENDED
+}
+
+enum WorkLocation {
+  SITE
+  OFFICE
+  HOME
+  TRAVEL
+}
+
+enum AttendanceStatus {
+  DRAFT
+  SUBMITTED
+  N1_APPROVED
+  APPROVED
+  REJECTED
+  REOPENED
+}
+
+enum TimesheetStatus {
+  DRAFT
+  SUBMITTED
+  N1_APPROVED
+  APPROVED
+  REJECTED
+  REOPENED
+}
+
+enum BillingType {
+  BILLABLE
+  NON_BILLABLE
+}
+
+enum LeaveRequestStatus {
+  DRAFT
+  SUBMITTED
+  N1_APPROVED
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum ApprovalEntityType {
+  TIMESHEET
+  LEAVE_REQUEST
+  ATTENDANCE_PUNCH
+}
+
+enum RecordStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model SubscriptionPlan {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  maxUsers     Int
+  maxSites     Int
+  priceMonthly Decimal  @db.Decimal(10, 2)
+  features     Json
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenants Tenant[]
+}
+
+model Tenant {
+  id                 String       @id @default(cuid())
+  name               String
+  slug               String       @unique
+  email              String
+  phone              String?
+  address            String?
+  city               String?
+  country            String?
+  status             TenantStatus @default(TRIAL)
+  subscriptionPlanId String?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  deletedAt          DateTime?
+
+  subscriptionPlan SubscriptionPlan? @relation(fields: [subscriptionPlanId], references: [id], onDelete: SetNull)
+  users            User[]
+  employeeProfiles EmployeeProfile[]
+  projects         Project[]
+  sites            Site[]
+  siteAssignments  SiteAssignment[]
+  attendancePunches AttendancePunch[]
+  timesheets       Timesheet[]
+  timesheetLines   TimesheetLine[]
+  timesheetEntries TimesheetDayEntry[]
+  leaveTypes       LeaveType[]
+  leaveBalances    LeaveBalance[]
+  leaveRequests    LeaveRequest[]
+  approvalActions  ApprovalAction[]
+  holidays         Holiday[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  settings         TenantSettings?
+
+  @@index([subscriptionPlanId])
+  @@index([status])
+}
+
+model User {
+  id               String     @id @default(cuid())
+  tenantId         String?
+  email            String     @unique
+  passwordHash     String
+  firstName        String
+  lastName         String
+  phone            String?
+  role             UserRole
+  status           UserStatus @default(ACTIVE)
+  lastLoginAt           DateTime?
+  refreshTokenHash      String?
+  passwordResetToken    String?
+  passwordResetExpiry   DateTime?
+  createdAt             DateTime   @default(now())
+  updatedAt             DateTime   @updatedAt
+  deletedAt             DateTime?
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  employeeProfile EmployeeProfile?
+  managedProjects Project[] @relation("ProjectManager")
+  managedSites Site[] @relation("SiteManager")
+  siteAssignments SiteAssignment[]
+  attendancePunches AttendancePunch[] @relation("AttendanceUser")
+  approvedAttendancePunches AttendancePunch[] @relation("AttendanceApprover")
+  timesheets Timesheet[] @relation("TimesheetUser")
+  approvedTimesheets Timesheet[] @relation("TimesheetApprover")
+  rejectedTimesheets Timesheet[] @relation("TimesheetRejecter")
+  leaveBalances LeaveBalance[]
+  leaveRequests LeaveRequest[] @relation("LeaveRequestUser")
+  approvedLeaveRequests LeaveRequest[] @relation("LeaveRequestApprover")
+  rejectedLeaveRequests LeaveRequest[] @relation("LeaveRequestRejecter")
+  approvalActions ApprovalAction[]
+  auditLogs AuditLog[]
+  notifications Notification[]
+
+  @@index([tenantId])
+  @@index([role])
+  @@index([status])
+}
+
+model EmployeeProfile {
+  id                 String         @id @default(cuid())
+  tenantId           String
+  userId             String         @unique
+  employeeNumber     String
+  jobTitle           String
+  contractType       String
+  hireDate           DateTime       @db.Date
+  mainSiteId         String?
+  annualLeaveBalance Decimal        @default(0) @db.Decimal(8, 2)
+  hourlyRate         Decimal?       @db.Decimal(10, 2)
+  status             EmployeeStatus @default(ACTIVE)
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mainSite Site?  @relation(fields: [mainSiteId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, employeeNumber])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([mainSiteId])
+  @@index([status])
+}
+
+model Project {
+  id               String        @id @default(cuid())
+  tenantId         String
+  code             String
+  name             String
+  clientName       String?
+  projectManagerId String
+  startDate        DateTime?     @db.Date
+  plannedEndDate   DateTime?     @db.Date
+  status           ProjectStatus @default(ACTIVE)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  deletedAt        DateTime?
+
+  tenant         Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  projectManager User   @relation("ProjectManager", fields: [projectManagerId], references: [id], onDelete: Restrict)
+  sites          Site[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([projectManagerId])
+  @@index([status])
+}
+
+model Site {
+  id              String     @id @default(cuid())
+  tenantId        String
+  projectId       String?
+  code            String
+  name            String
+  clientName      String
+  address         String?
+  city            String?
+  country         String?
+  managerId       String?
+  startDate       DateTime?  @db.Date
+  plannedEndDate  DateTime?  @db.Date
+  status          SiteStatus @default(ACTIVE)
+  progressPercent Int        @default(0)
+  latitude        Decimal?   @db.Decimal(10, 7)
+  longitude       Decimal?   @db.Decimal(10, 7)
+  gpsRadiusMeters Int        @default(150)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  deletedAt       DateTime?
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  manager User? @relation("SiteManager", fields: [managerId], references: [id], onDelete: SetNull)
+  employeeProfiles EmployeeProfile[]
+  assignments SiteAssignment[]
+  attendancePunches AttendancePunch[]
+  timesheetLines TimesheetLine[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([projectId])
+  @@index([managerId])
+  @@index([status])
+}
+
+model SiteAssignment {
+  id         String   @id @default(cuid())
+  tenantId   String
+  siteId     String
+  userId     String
+  startDate  DateTime @db.Date
+  endDate    DateTime? @db.Date
+  roleOnSite String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site   @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([siteId])
+  @@index([userId])
+  @@index([startDate])
+  @@index([endDate])
+}
+
+model AttendancePunch {
+  id                String           @id @default(cuid())
+  tenantId          String
+  userId            String
+  siteId            String?
+  punchDate         DateTime         @db.Date
+  checkInAt         DateTime?
+  checkOutAt        DateTime?
+  durationMinutes   Int?
+  workLocation      WorkLocation     @default(SITE)
+  checkInLatitude   Decimal?         @db.Decimal(10, 7)
+  checkInLongitude  Decimal?         @db.Decimal(10, 7)
+  checkOutLatitude  Decimal?         @db.Decimal(10, 7)
+  checkOutLongitude Decimal?         @db.Decimal(10, 7)
+  isGpsAnomaly      Boolean          @default(false)
+  employeeComment   String?
+  managerComment    String?
+  status            AttendanceStatus @default(DRAFT)
+  approvedById      String?
+  approvedAt        DateTime?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User   @relation("AttendanceUser", fields: [userId], references: [id], onDelete: Cascade)
+  site       Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  approvedBy User?  @relation("AttendanceApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([siteId])
+  @@index([status])
+  @@index([punchDate])
+}
+
+model Timesheet {
+  id              String          @id @default(cuid())
+  tenantId        String
+  userId          String
+  periodStart     DateTime        @db.Date
+  periodEnd       DateTime        @db.Date
+  status          TimesheetStatus @default(DRAFT)
+  submittedAt     DateTime?
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedById    String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User   @relation("TimesheetUser", fields: [userId], references: [id], onDelete: Cascade)
+  approvedBy User?  @relation("TimesheetApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy User?  @relation("TimesheetRejecter", fields: [rejectedById], references: [id], onDelete: SetNull)
+  lines      TimesheetLine[]
+
+  @@unique([tenantId, userId, periodStart, periodEnd])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([status])
+  @@index([periodStart])
+  @@index([periodEnd])
+}
+
+model TimesheetLine {
+  id             String       @id @default(cuid())
+  tenantId       String
+  timesheetId    String
+  siteId         String?
+  taskName       String
+  billingType    BillingType  @default(BILLABLE)
+  activity       String?
+  workLocation   WorkLocation @default(SITE)
+  placeOfWork    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  timesheet Timesheet @relation(fields: [timesheetId], references: [id], onDelete: Cascade)
+  site      Site? @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  entries   TimesheetDayEntry[]
+
+  @@index([tenantId])
+  @@index([timesheetId])
+  @@index([siteId])
+}
+
+model TimesheetDayEntry {
+  id              String   @id @default(cuid())
+  tenantId        String
+  timesheetLineId String
+  entryDate       DateTime @db.Date
+  hours           Decimal  @default(0) @db.Decimal(5, 2)
+  comment         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant        Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  timesheetLine TimesheetLine @relation(fields: [timesheetLineId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, timesheetLineId, entryDate])
+  @@index([tenantId])
+  @@index([timesheetLineId])
+  @@index([entryDate])
+}
+
+model LeaveType {
+  id                  String       @id @default(cuid())
+  tenantId            String
+  code                String
+  name                String
+  isPaid              Boolean      @default(true)
+  annualAllowanceDays Decimal      @default(0) @db.Decimal(6, 2)
+  requiresApproval    Boolean      @default(true)
+  status              RecordStatus @default(ACTIVE)
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  balances LeaveBalance[]
+  requests LeaveRequest[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId])
+  @@index([status])
+}
+
+model LeaveBalance {
+  id               String   @id @default(cuid())
+  tenantId         String
+  userId           String
+  leaveTypeId      String
+  year             Int
+  openingBalance   Decimal  @default(0) @db.Decimal(6, 2)
+  accruedDays      Decimal  @default(0) @db.Decimal(6, 2)
+  usedDays         Decimal  @default(0) @db.Decimal(6, 2)
+  pendingDays      Decimal  @default(0) @db.Decimal(6, 2)
+  remainingDays    Decimal  @default(0) @db.Decimal(6, 2)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  leaveType LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, leaveTypeId, year])
+  @@index([tenantId])
+  @@index([userId])
+  @@index([leaveTypeId])
+}
+
+model LeaveRequest {
+  id              String             @id @default(cuid())
+  tenantId        String
+  userId          String
+  leaveTypeId     String
+  startDate       DateTime           @db.Date
+  endDate         DateTime           @db.Date
+  durationDays    Decimal            @db.Decimal(6, 2)
+  startHalfDay    Boolean            @default(false)
+  endHalfDay      Boolean            @default(false)
+  comment         String?
+  status          LeaveRequestStatus @default(DRAFT)
+  submittedAt     DateTime?
+  approvedById    String?
+  approvedAt      DateTime?
+  rejectedById    String?
+  rejectedAt      DateTime?
+  rejectionReason String?
+  attachmentKey   String?
+  attachmentUrl   String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  tenant     Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User   @relation("LeaveRequestUser", fields: [userId], references: [id], onDelete: Cascade)
+  leaveType  LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+  approvedBy User? @relation("LeaveRequestApprover", fields: [approvedById], references: [id], onDelete: SetNull)
+  rejectedBy User? @relation("LeaveRequestRejecter", fields: [rejectedById], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([leaveTypeId])
+  @@index([status])
+  @@index([startDate])
+  @@index([endDate])
+}
+
+model ApprovalAction {
+  id         String             @id @default(cuid())
+  tenantId   String
+  entityType ApprovalEntityType
+  entityId   String
+  actionById String
+  oldStatus  String
+  newStatus  String
+  comment    String?
+  createdAt  DateTime           @default(now())
+
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  actionBy User   @relation(fields: [actionById], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([entityType, entityId])
+  @@index([actionById])
+}
+
+model Holiday {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  date        DateTime @db.Date
+  country     String
+  isRecurring Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name, date])
+  @@index([tenantId])
+  @@index([date])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  userId     String?
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  tenantId  String
+  userId    String
+  title     String
+  message   String
+  type      String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([isRead])
+}
+
+model TenantSettings {
+  id                   String   @id @default(cuid())
+  tenantId             String   @unique
+  workDayStartTime     String   @default("08:00")
+  lateToleranceMinutes Int      @default(15)
+  gpsToleranceMeters   Int      @default(150)
+  overtimeTriggerHours Int      @default(8)
+  timesheetTaskTypes   Json     @default("[]")
+  updatedAt            DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
