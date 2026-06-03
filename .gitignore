@@ -16,3 +16,6 @@ test-results
 ~$*
 _tmp_*
 test_write
+*.tsbuildinfo
+*.bak
+apps/web/public/images/futura-expertise-hero.png
