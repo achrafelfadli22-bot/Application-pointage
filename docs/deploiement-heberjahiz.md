@@ -11,17 +11,24 @@ Ce projet doit etre deploye sur un VPS ou un serveur Cloud/Dedie. Un hebergement
 
 ## 2. Configurer le domaine chez Heberjahiz
 
-Dans la zone DNS Heberjahiz du domaine, creer un enregistrement :
+Dans la zone DNS Heberjahiz du domaine `futura-expert.com`, creer ces enregistrements :
 
 - Type : `A`
-- Nom : `pointage` ou `@` selon le domaine voulu
+- Nom : `@`
 - Valeur : IP publique du VPS
 - TTL : valeur par defaut
 
-Exemples :
+Puis ajouter aussi :
 
-- `pointage.futura-expert.com` vers l'IP du VPS
-- ou `futura-expert.com` vers l'IP du VPS
+- Type : `A`
+- Nom : `www`
+- Valeur : IP publique du VPS
+- TTL : valeur par defaut
+
+Resultat attendu :
+
+- `futura-expert.com` pointe vers le VPS
+- `www.futura-expert.com` pointe vers le VPS puis redirige vers `https://futura-expert.com`
 
 Attendre la propagation DNS avant de lancer HTTPS.
 
@@ -36,6 +43,7 @@ cp .env.production.example .env.production
 Modifier `.env.production` :
 
 - `APP_DOMAIN`
+- `APP_WWW_DOMAIN`
 - `WEB_ORIGIN`
 - `LETSENCRYPT_EMAIL`
 - `POSTGRES_PASSWORD`
@@ -70,8 +78,8 @@ docker compose -f docker-compose.prod.yml logs -f caddy
 
 Puis ouvrir :
 
-- `https://APP_DOMAIN`
-- `https://APP_DOMAIN/api/health`
+- `https://futura-expert.com`
+- `https://futura-expert.com/api/health`
 
 ## 6. Mise a jour apres un push GitHub
 

@@ -2,8 +2,11 @@
 	email {$LETSENCRYPT_EMAIL}
 }
 
-{$APP_DOMAIN} {
+{$APP_DOMAIN}, {$APP_WWW_DOMAIN} {
 	encode zstd gzip
+
+	@www host {$APP_WWW_DOMAIN}
+	redir @www https://{$APP_DOMAIN}{uri} permanent
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
