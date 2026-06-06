@@ -20,11 +20,18 @@ type Site = (typeof demoSites)[number] & {
   project?: { id: string; code: string; name: string } | null;
 };
 type Project = { id: string; code: string; name: string };
+type Employee = {
+  id: string;
+  status: string;
+  user: { id: string; firstName: string; lastName: string; email: string; role: string; status?: string };
+};
+type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[] };
 
 // ─── Modal Nouveau Chantier ───────────────────────────────────────────────────
 
 const emptyForm = {
   projectId: '', code: '', name: '', clientName: '', address: '', city: '', country: 'MA',
+  managerId: '',
   startDate: '', plannedEndDate: '',
   progressPercent: 0,
   latitude: '', longitude: '', gpsRadiusMeters: 200,
@@ -37,6 +44,16 @@ function NewSiteModal({ onCreated }: { onCreated: () => void }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { data: projects } = useApiData<Project[]>(() => api.projects() as Promise<Project[]>, []);
+  const { data: employees } = useApiData<Employee[]>(() => api.employees() as Promise<Employee[]>, []);
+  const { data: siteOptions } = useApiData<SiteOptions>(
+    () => api.settingsSiteOptions() as Promise<SiteOptions>,
+    { siteRoleOptions: [], clientOptions: [] },
+  );
+  const managerOptions = employees
+    .filter((employee) => employee.status === 'ACTIVE')
+    .filter((employee) => employee.user.status !== 'INACTIVE')
+    .filter((employee) => employee.user.role === 'MANAGER');
+  const clientOptions = siteOptions.clientOptions ?? [];
 
   function f(key: keyof typeof emptyForm, label: string, type = 'text', placeholder?: string) {
     return (
@@ -65,6 +82,7 @@ function NewSiteModal({ onCreated }: { onCreated: () => void }) {
     try {
       const payload: Record<string, unknown> = { ...form };
       if (!form.projectId) delete payload['projectId'];
+      if (!form.managerId) delete payload['managerId'];
       if (form.latitude) payload['latitude'] = Number(form.latitude);
       else delete payload['latitude'];
       if (form.longitude) payload['longitude'] = Number(form.longitude);
@@ -108,7 +126,22 @@ function NewSiteModal({ onCreated }: { onCreated: () => void }) {
               </SelectField>
               {f('code',        'Code chantier',     'text', 'ex: CH-003')}
               {f('name',        'Nom du chantier')}
-              {f('clientName',  'Client / Maître d\'ouvrage')}
+              <SelectField label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
+                <option value="">Selectionner</option>
+                {clientOptions.map((client) => (
+                  <option key={client} value={client}>
+                    {client}
+                  </option>
+                ))}
+              </SelectField>
+              <SelectField label="Chef de site" value={form.managerId} onChange={(e) => setForm((p) => ({ ...p, managerId: e.target.value }))}>
+                <option value="">Selectionner</option>
+                {managerOptions.map((employee) => (
+                  <option key={employee.user.id} value={employee.user.id}>
+                    {employee.user.firstName} {employee.user.lastName}
+                  </option>
+                ))}
+              </SelectField>
               {f('address',     'Adresse')}
               {f('city',        'Ville')}
               {f('country',     'Pays (ISO)',         'text', 'MA')}

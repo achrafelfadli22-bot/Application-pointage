@@ -30,6 +30,7 @@ export class ReportsController {
   }
 
   @Get('timesheets')
+  @Roles(UserRole.SUPER_ADMIN, UserRole.RESOURCE_MANAGER, UserRole.HR, UserRole.PROJECT_MANAGER, UserRole.MANAGER, UserRole.EMPLOYEE)
   timesheets(@CurrentUser() user: CurrentUserContext, @Query() filters: ReportFilterDto) {
     return this.service.timesheets(user, filters);
   }

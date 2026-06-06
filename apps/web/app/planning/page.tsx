@@ -75,7 +75,7 @@ function getStatusStyle(s: DayStatus): { bg: string; text: string; label: string
 
 const demoEmployees: Employee[] = [
   { id: 'e1', jobTitle: 'Maçon', status: 'ACTIVE', user: { id: 'u1', firstName: 'Omar', lastName: 'Mansouri', role: 'EMPLOYEE' } },
-  { id: 'e2', jobTitle: 'Chef chantier', status: 'ACTIVE', user: { id: 'u2', firstName: 'Karim', lastName: 'Benali', role: 'MANAGER' } },
+  { id: 'e2', jobTitle: 'Chef de site', status: 'ACTIVE', user: { id: 'u2', firstName: 'Karim', lastName: 'Benali', role: 'MANAGER' } },
   { id: 'e3', jobTitle: 'Électricien', status: 'ACTIVE', user: { id: 'u3', firstName: 'Fatima', lastName: 'Zahraoui', role: 'EMPLOYEE' } },
 ];
 

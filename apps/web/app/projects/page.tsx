@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { ColumnDef } from '@tanstack/react-table';
 import { Plus, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
@@ -29,6 +30,7 @@ type Employee = {
   id: string;
   user: { id: string; firstName: string; lastName: string; email: string; role: string };
 };
+type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[] };
 
 const emptyForm = {
   code: '',
@@ -40,7 +42,7 @@ const emptyForm = {
   status: 'ACTIVE',
 };
 
-function NewProjectModal({ onCreated }: { onCreated: () => void }) {
+function NewProjectModal({ onCreated, clientOptions }: { onCreated: () => void; clientOptions: string[] }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -95,7 +97,14 @@ function NewProjectModal({ onCreated }: { onCreated: () => void }) {
             <div className="grid gap-3 md:grid-cols-2">
               <FormField label="Code projet" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
               <FormField label="Nom du projet" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-              <FormField label="Client" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))} />
+              <SelectField label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
+                <option value="">Non renseigne</option>
+                {clientOptions.map((client) => (
+                  <option key={client} value={client}>
+                    {client}
+                  </option>
+                ))}
+              </SelectField>
               <SelectField label="Chef de projet" value={form.projectManagerId} onChange={(e) => setForm((p) => ({ ...p, projectManagerId: e.target.value }))}>
                 <option value="">Selectionner</option>
                 {managerOptions.map((employee) => (
@@ -103,6 +112,11 @@ function NewProjectModal({ onCreated }: { onCreated: () => void }) {
                     {employee.user.firstName} {employee.user.lastName} - Chef de projet
                   </option>
                 ))}
+              </SelectField>
+              <SelectField label="Etat du projet" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
+                <option value="ACTIVE">Actif</option>
+                <option value="SUSPENDED">Suspendu</option>
+                <option value="COMPLETED">Termine</option>
               </SelectField>
               <DateField label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
               <DateField label="Fin prevue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
@@ -126,8 +140,19 @@ function NewProjectModal({ onCreated }: { onCreated: () => void }) {
 export default function ProjectsPage() {
   const [search, setSearch] = useState('');
   const { data, refresh } = useApiData<Project[]>(() => api.projects() as Promise<Project[]>, []);
+  const { data: siteOptions } = useApiData<SiteOptions>(
+    () => api.settingsSiteOptions() as Promise<SiteOptions>,
+    { siteRoleOptions: [], clientOptions: [] },
+  );
   const myRole = tokenStore.session?.role ?? '';
   const canCreate = myRole === 'RESOURCE_MANAGER';
+  const clientOptions = Array.from(
+    new Set(
+      [...(siteOptions.clientOptions ?? []), ...data.map((project) => project.clientName)]
+        .map((client) => client?.trim())
+        .filter(Boolean) as string[],
+    ),
+  ).sort();
 
   const filtered = data.filter((project) => {
     const q = search.toLowerCase();
@@ -141,6 +166,14 @@ export default function ProjectsPage() {
     { header: 'Chef de projet', cell: ({ row }) => `${row.original.projectManager.firstName} ${row.original.projectManager.lastName}` },
     { header: 'Chantiers', cell: ({ row }) => row.original._count.sites },
     { header: 'Statut', cell: ({ row }) => <StatusBadge status={row.original.status} /> },
+    {
+      header: 'Actions',
+      cell: ({ row }) => (
+        <Link href={`/projects/${row.original.id}`} className="text-sm font-medium text-accent hover:underline">
+          Voir
+        </Link>
+      ),
+    },
   ];
 
   return (
@@ -149,7 +182,7 @@ export default function ProjectsPage() {
         <PageHeader
           title="Projets"
           description="Designation du chef de projet et rattachement des chantiers."
-          actions={canCreate ? <NewProjectModal onCreated={refresh} /> : undefined}
+          actions={canCreate ? <NewProjectModal onCreated={refresh} clientOptions={clientOptions} /> : undefined}
         />
 
         <div className="rounded-xl border border-borderSoft bg-surface p-4 shadow-card">

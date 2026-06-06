@@ -14,7 +14,11 @@ export class AuditLogController {
 
   @Get()
   @Roles(UserRole.SUPER_ADMIN, UserRole.RESOURCE_MANAGER, UserRole.HR)
-  findAll(@CurrentUser() user: CurrentUserContext, @Query('take') take?: string) {
-    return this.service.findAll(user, Number(take ?? 50));
+  findAll(
+    @CurrentUser() user: CurrentUserContext,
+    @Query('take') take?: string,
+    @Query('cursor') cursor?: string,
+  ) {
+    return this.service.findAll(user, { take: Number(take ?? 50), cursor });
   }
 }

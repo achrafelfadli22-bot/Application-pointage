@@ -24,6 +24,7 @@ type Employee = {
   status: string;
   user: { id: string; firstName: string; lastName: string; email: string; role: string };
 };
+type TimesheetSettings = { timesheetPeriodDays: number };
 
 // ─── Modal Nouvelle Timesheet ─────────────────────────────────────────────────
 
@@ -40,13 +41,18 @@ function NewTimesheetModal({ onCreated }: { onCreated: () => void }) {
     () => (canChooseOwner ? (api.employees() as Promise<Employee[]>) : Promise.resolve([])),
     [],
   );
+  const { data: timesheetSettings } = useApiData<TimesheetSettings>(
+    () => api.settingsTimesheet() as Promise<TimesheetSettings>,
+    { timesheetPeriodDays: 7 },
+  );
+  const periodDays = Math.max(1, Math.min(31, timesheetSettings.timesheetPeriodDays || 7));
 
-  // Auto-fill a full 7-day week when start is set.
+  // Auto-fill the tenant-configured period when start is set.
   function handleStartChange(val: string) {
     setPeriodStart(val);
     if (val) {
       const d = new Date(val);
-      d.setUTCDate(d.getUTCDate() + 6);
+      d.setUTCDate(d.getUTCDate() + periodDays - 1);
       setPeriodEnd(d.toISOString().slice(0, 10));
     }
   }
@@ -120,9 +126,9 @@ export default function TimesheetsPage() {
   const [statusFilter, setStatusFilter] = useState<TimesheetStatusFilter>('ALL');
   const { data, refresh } = useApiData<Timesheet[]>(() => api.timesheets() as Promise<Timesheet[]>, demoTimesheets);
 
-  // Timesheets validées par le Manager (+ RESOURCE_MANAGER)
+  // Timesheets validees par N+1/N+2 ou HR.
   const myRole    = tokenStore.session?.role ?? '';
-  const canManage = ['RESOURCE_MANAGER', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
+  const canManage = ['HR', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
   // HR est en lecture seule — ne peut pas créer de timesheet
   const canCreate = ['RESOURCE_MANAGER', 'PROJECT_MANAGER', 'MANAGER', 'EMPLOYEE'].includes(myRole);
 

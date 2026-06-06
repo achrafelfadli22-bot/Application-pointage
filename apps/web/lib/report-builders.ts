@@ -25,7 +25,55 @@ function statusLabel(s: string): string {
     REJECTED: 'Refusé', REOPENED: 'Rouvert', CANCELLED: 'Annulé',
     ACTIVE: 'Actif', INACTIVE: 'Inactif',
   };
-  return map[s] ?? s;
+  return s === 'N1_APPROVED' ? 'Validee N+1' : map[s] ?? s;
+}
+
+function isoDay(value: string | Date | null | undefined): string {
+  if (!value) return '';
+  return String(value).slice(0, 10);
+}
+
+function dateKeysBetween(start?: string | null, end?: string | null): string[] {
+  if (!start || !end) return [];
+  const first = new Date(isoDay(start));
+  const last = new Date(isoDay(end));
+  if (Number.isNaN(first.getTime()) || Number.isNaN(last.getTime()) || last < first) return [];
+
+  const keys: string[] = [];
+  const cursor = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth(), first.getUTCDate()));
+  const limit = new Date(Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate()));
+
+  while (cursor <= limit && keys.length < 62) {
+    keys.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return keys;
+}
+
+function dateHeader(key: string): string {
+  const date = new Date(key);
+  return Number.isNaN(date.getTime())
+    ? key
+    : date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+
+function safeSheetName(value: string, fallback: string) {
+  const cleaned = (value || fallback).replace(/[\\/?*:[\]]/g, ' ').replace(/\s+/g, ' ').trim();
+  return (cleaned || fallback).slice(0, 31);
+}
+
+function fullName(user: any) {
+  return `${user?.firstName ?? ''} ${user?.lastName ?? ''}`.trim() || user?.email || 'Employe';
+}
+
+function numberValue(value: unknown) {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function joinLabel(...parts: Array<string | null | undefined>) {
+  return parts.filter(Boolean).join(' - ') || '-';
 }
 
 // ─── Présence journalière ─────────────────────────────────────────────────────
@@ -173,6 +221,162 @@ export function buildHoursByEmployeeSheet(data: any[]): ExcelSheet[] {
 // ─── Timesheets ───────────────────────────────────────────────────────────────
 
 export function buildTimesheetsSheet(data: any[]): ExcelSheet[] {
+  const dateKeys = Array.from(
+    data.reduce((set: Set<string>, ts) => {
+      dateKeysBetween(ts.periodStart, ts.periodEnd).forEach((key) => set.add(key));
+      for (const line of ts.lines ?? []) {
+        for (const entry of line.entries ?? []) {
+          const key = isoDay(entry.entryDate);
+          if (key) set.add(key);
+        }
+      }
+      return set;
+    }, new Set<string>()),
+  ).sort();
+
+  const effectiveDateKeys = dateKeys.length ? dateKeys : [new Date().toISOString().slice(0, 10)];
+  const dateColumns = effectiveDateKeys.map((key, index) => ({
+    header: dateHeader(key),
+    key: `d${index}`,
+    width: 10,
+    type: 'number' as const,
+  }));
+
+  const summaryByUser = new Map<string, Record<string, CellValue>>();
+  const sheetsByUser = new Map<string, { user: any; timesheets: any[] }>();
+
+  for (const ts of data) {
+    const userKey = ts.user?.id || ts.user?.email || fullName(ts.user);
+    if (!sheetsByUser.has(userKey)) {
+      sheetsByUser.set(userKey, { user: ts.user, timesheets: [] });
+    }
+    sheetsByUser.get(userKey)!.timesheets.push(ts);
+
+    const totalHours = (ts.lines ?? []).reduce(
+      (sum: number, line: any) =>
+        sum + (line.entries ?? []).reduce((entrySum: number, entry: any) => entrySum + numberValue(entry.hours), 0),
+      0,
+    );
+
+    const previous = summaryByUser.get(userKey);
+    summaryByUser.set(userKey, {
+      employe: fullName(ts.user),
+      matricule: ts.user?.employeeProfile?.employeeNumber ?? '',
+      email: ts.user?.email ?? '',
+      debut: previous?.debut || fmtDate(ts.periodStart),
+      fin: fmtDate(ts.periodEnd) || previous?.fin || '',
+      statuts: previous?.statuts ? `${previous.statuts}, ${statusLabel(ts.status ?? '')}` : statusLabel(ts.status ?? ''),
+      timesheets: numberValue(previous?.timesheets) + 1,
+      heures: Number((numberValue(previous?.heures) + totalHours).toFixed(2)),
+    });
+  }
+
+  const summaryRows = Array.from(summaryByUser.values()).sort((a, b) =>
+    String(a.employe).localeCompare(String(b.employe), 'fr-FR'),
+  );
+
+  const sheets: ExcelSheet[] = [
+    {
+      name: 'Synthese consolidee',
+      columns: [
+        { header: 'Employe', key: 'employe', width: 26 },
+        { header: 'Matricule', key: 'matricule', width: 14 },
+        { header: 'Email', key: 'email', width: 30 },
+        { header: 'Debut', key: 'debut', width: 14 },
+        { header: 'Fin', key: 'fin', width: 14 },
+        { header: 'Statuts', key: 'statuts', width: 24 },
+        { header: 'Nb timesheets', key: 'timesheets', width: 14, type: 'number' },
+        { header: 'Total', key: 'heures', width: 12, type: 'number', style: 'total' },
+      ],
+      rows: summaryRows,
+      totals: {
+        employe: 'TOTAL',
+        timesheets: summaryRows.reduce((sum, row) => sum + numberValue(row.timesheets), 0),
+        heures: Number(summaryRows.reduce((sum, row) => sum + numberValue(row.heures), 0).toFixed(2)),
+      },
+    },
+  ];
+
+  const usedSheetNames = new Set<string>(sheets.map((sheet) => sheet.name));
+
+  for (const [index, group] of Array.from(sheetsByUser.values()).entries()) {
+    const user = group.user;
+    const rowsByLine = new Map<string, Record<string, CellValue>>();
+    const totalsByDate: Record<string, number> = Object.fromEntries(effectiveDateKeys.map((_, i) => [`d${i}`, 0]));
+
+    for (const ts of group.timesheets) {
+      for (const line of ts.lines ?? []) {
+        const project = line.site?.project ? joinLabel(line.site.project.code, line.site.project.name) : '-';
+        const site = line.site ? joinLabel(line.site.code, line.site.name) : line.placeOfWork || '-';
+        const rubrique = line.activity || line.taskName || 'Tache';
+        const key = [rubrique, project, site, line.taskName].join('|');
+
+        if (!rowsByLine.has(key)) {
+          rowsByLine.set(key, {
+            rubrique,
+            projet: project,
+            chantier: site,
+            description: line.taskName || '',
+            ...Object.fromEntries(effectiveDateKeys.map((_, i) => [`d${i}`, 0])),
+            total: 0,
+          });
+        }
+
+        const row = rowsByLine.get(key)!;
+        for (const entry of line.entries ?? []) {
+          const dateIndex = effectiveDateKeys.indexOf(isoDay(entry.entryDate));
+          if (dateIndex < 0) continue;
+          const colKey = `d${dateIndex}`;
+          const hours = numberValue(entry.hours);
+          row[colKey] = Number((numberValue(row[colKey]) + hours).toFixed(2));
+          row.total = Number((numberValue(row.total) + hours).toFixed(2));
+          totalsByDate[colKey] = Number((numberValue(totalsByDate[colKey]) + hours).toFixed(2));
+        }
+      }
+    }
+
+    const rows = Array.from(rowsByLine.values()).sort((a, b) =>
+      `${a.rubrique} ${a.projet} ${a.chantier}`.localeCompare(`${b.rubrique} ${b.projet} ${b.chantier}`, 'fr-FR'),
+    );
+
+    const baseName = safeSheetName(`TS ${fullName(user)}`, `Timesheet ${index + 1}`);
+    let sheetName = baseName;
+    let suffix = 2;
+    while (usedSheetNames.has(sheetName)) {
+      sheetName = safeSheetName(`${baseName} ${suffix}`, `Timesheet ${index + 1}`);
+      suffix += 1;
+    }
+    usedSheetNames.add(sheetName);
+
+    sheets.push({
+      name: sheetName,
+      preRows: [
+        ['Nom', user?.lastName ?? ''],
+        ['Prenom', user?.firstName ?? ''],
+        ['Matr', user?.employeeProfile?.employeeNumber ?? ''],
+        ['Periode', `${fmtDate(group.timesheets[0]?.periodStart)} - ${fmtDate(group.timesheets[group.timesheets.length - 1]?.periodEnd)}`],
+      ],
+      columns: [
+        { header: 'Type / Tache', key: 'rubrique', width: 20 },
+        { header: 'Projet', key: 'projet', width: 24 },
+        { header: 'Chantier', key: 'chantier', width: 28 },
+        { header: 'Description', key: 'description', width: 32 },
+        ...dateColumns,
+        { header: 'Total', key: 'total', width: 12, type: 'number', style: 'total' },
+      ],
+      rows,
+      totals: {
+        rubrique: 'Total',
+        ...totalsByDate,
+        total: Number(Object.values(totalsByDate).reduce((sum, value) => sum + numberValue(value), 0).toFixed(2)),
+      },
+    });
+  }
+
+  return sheets;
+}
+
+function buildTimesheetsSheetLegacy(data: any[]): ExcelSheet[] {
   // Feuille 1 : résumé
   const summaryRows = data.map((ts) => ({
     employe:    `${ts.user?.firstName ?? ''} ${ts.user?.lastName ?? ''}`.trim(),

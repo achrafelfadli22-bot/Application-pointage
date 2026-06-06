@@ -154,7 +154,7 @@ type Employee = { id: string; firstName: string; lastName: string };
 
 export default function ReportsPage() {
   const myRole = tokenStore.session?.role ?? '';
-  const visibleRapports = RAPPORTS.filter((r) => r.roles.includes(myRole));
+  const visibleRapports = RAPPORTS.filter((r) => r.roles.includes(myRole) || (myRole === 'EMPLOYEE' && r.endpoint === 'timesheets'));
 
   const [loading, setLoading]       = useState<string | null>(null);
   const [exported, setExported]     = useState<string | null>(null);
@@ -163,9 +163,11 @@ export default function ReportsPage() {
   const [dateTo, setDateTo]         = useState('');
   const [siteId, setSiteId]         = useState('');
   const [employeeId, setEmployeeId] = useState('');
+  const canFilterSites = myRole !== 'EMPLOYEE';
+  const canFilterEmployees = ['PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'].includes(myRole);
 
-  const { data: sites }     = useApiData<Site[]>(() => api.sites() as Promise<Site[]>, []);
-  const { data: employees } = useApiData<Employee[]>(() => api.employees() as Promise<Employee[]>, []);
+  const { data: sites }     = useApiData<Site[]>(() => (canFilterSites ? api.sites() as Promise<Site[]> : Promise.resolve([])), []);
+  const { data: employees } = useApiData<Employee[]>(() => (canFilterEmployees ? api.employees() as Promise<Employee[]> : Promise.resolve([])), []);
 
   function applyPreset(preset: typeof PRESETS[number]) {
     const { from, to } = preset.get();
@@ -207,7 +209,9 @@ export default function ReportsPage() {
       if (!builder) throw new Error(`Aucun builder pour "${rapport.endpoint}"`);
 
       const sheets = builder(Array.isArray(data) ? data : [data]);
-      const filename = `${rapport.endpoint}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      const filename = rapport.endpoint === 'timesheets'
+        ? `modele-timesheets-${new Date().toISOString().slice(0, 10)}.xlsx`
+        : `${rapport.endpoint}-${new Date().toISOString().slice(0, 10)}.xlsx`;
       downloadExcel(sheets, filename);
 
       setExported(rapport.endpoint);
@@ -223,7 +227,7 @@ export default function ReportsPage() {
       <div className="grid gap-6">
         <PageHeader
           title="Rapports"
-          description="Exportez vos données RH, présence, paie et chantiers au format CSV."
+          description="Exportez vos donnees RH, presence, paie et chantiers au format Excel."
         />
 
         {/* Filtres globaux */}
@@ -247,13 +251,17 @@ export default function ReportsPage() {
           <div className="grid gap-3 md:grid-cols-4">
             <DateField label="Date début" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             <DateField label="Date fin"   value={dateTo}   onChange={(e) => setDateTo(e.target.value)} />
-            <SelectField label="Chantier" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-              <option value="">Tous les chantiers</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>{s.code} — {s.name}</option>
-              ))}
-            </SelectField>
-            {myRole !== 'MANAGER' && (
+            {canFilterSites ? (
+              <SelectField label="Chantier" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+                <option value="">Tous les chantiers</option>
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>{s.code} — {s.name}</option>
+                ))}
+              </SelectField>
+            ) : (
+              <div className="hidden md:block" />
+            )}
+            {canFilterEmployees && (
               <SelectField label="Employé" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
                 <option value="">Tous les employés</option>
                 {employees.map((e) => (

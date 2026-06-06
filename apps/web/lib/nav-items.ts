@@ -36,7 +36,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Planning équipe',   href: '/planning',              icon: CalendarRange,   roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
   { label: 'Projets',           href: '/projects',              icon: Building2,       roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
   { label: 'Chantiers',         href: '/sites',                 icon: Building2,       roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
-  { label: 'Rapports',          href: '/reports',               icon: BarChart3,       roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
+  { label: 'Rapports',          href: '/reports',               icon: BarChart3,       roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
 
   // ── Administration société ───────────────────────────────────────────────────
   { label: 'Paramètres',        href: '/settings',              icon: Settings,        roles: ['RESOURCE_MANAGER', 'HR'] },
@@ -52,6 +52,6 @@ export const ROLE_LABELS: Record<string, string> = {
   RESOURCE_MANAGER: 'Ressource Manager',
   HR:           'RH',
   PROJECT_MANAGER: 'Chef de projet',
-  MANAGER:      'Manager chantier',
+  MANAGER:      'Chef de site',
   EMPLOYEE:     'Employé',
 };

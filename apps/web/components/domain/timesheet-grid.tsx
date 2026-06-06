@@ -108,8 +108,8 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
   const myRole = tokenStore.session?.role ?? '';
   const myUserId = tokenStore.session?.user?.id ?? '';
   const isOwner = timesheet.user.id === myUserId;
-  const isApprover = ['RESOURCE_MANAGER', 'HR', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
-  const isReopener = ['RESOURCE_MANAGER', 'HR'].includes(myRole);
+  const isApprover = ['HR', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
+  const isReopener = ['HR'].includes(myRole);
 
   const isDraftOrReopened = ['DRAFT', 'REOPENED'].includes(timesheet.status);
   const isWaitingApproval = ['SUBMITTED', 'N1_APPROVED'].includes(timesheet.status);

@@ -73,10 +73,31 @@ export class ReportsService {
         status: filters.status as never,
         periodStart: filters.startDate ? { gte: new Date(filters.startDate) } : undefined,
         periodEnd: filters.endDate ? { lte: new Date(filters.endDate) } : undefined,
+        lines: filters.siteId ? { some: { siteId: filters.siteId } } : undefined,
       },
       include: {
-        user: { select: { firstName: true, lastName: true, email: true } },
-        lines: { include: { entries: true, site: { select: { code: true, name: true } } } },
+        user: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            employeeProfile: { select: { employeeNumber: true, jobTitle: true } },
+          },
+        },
+        lines: {
+          where: filters.siteId ? { siteId: filters.siteId } : undefined,
+          include: {
+            entries: { orderBy: { entryDate: 'asc' } },
+            site: {
+              select: {
+                code: true,
+                name: true,
+                project: { select: { code: true, name: true } },
+              },
+            },
+          },
+        },
       },
       orderBy: { periodStart: 'desc' },
     });

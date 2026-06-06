@@ -38,7 +38,14 @@ export class ProjectsController {
   }
 
   @Get(':id')
-  @Roles(UserRole.SUPER_ADMIN, UserRole.RESOURCE_MANAGER, UserRole.HR, UserRole.PROJECT_MANAGER, UserRole.MANAGER)
+  @Roles(
+    UserRole.SUPER_ADMIN,
+    UserRole.RESOURCE_MANAGER,
+    UserRole.HR,
+    UserRole.PROJECT_MANAGER,
+    UserRole.MANAGER,
+    UserRole.EMPLOYEE,
+  )
   findOne(@CurrentUser() user: CurrentUserContext, @Param('id') id: string) {
     return this.service.findOne(user, id);
   }

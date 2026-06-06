@@ -25,7 +25,7 @@ export default function LoginPage() {
   const form = useForm<LoginForm>({
     resolver: zodResolver(schema),
     defaultValues: {
-      email: 'employee@societe-a.test',
+      email: 'a.elyoussefi@futura-expert.com',
       password: 'Password123!',
     },
   });
@@ -134,9 +134,8 @@ export default function LoginPage() {
         {/* Comptes de test */}
         <div className="mt-4 rounded-lg border border-borderSoft bg-surface p-4 text-xs text-mutedText">
           <p className="mb-1.5 font-medium text-bodyText">Comptes de test</p>
-          <p>superadmin@pointage360.test</p>
-          <p>admin@societe-a.test &nbsp;|&nbsp; hr@societe-a.test</p>
-          <p>manager@societe-a.test &nbsp;|&nbsp; employee@societe-a.test</p>
+          <p>a.elyoussefi@futura-expert.com</p>
+          <p>Compte Ressource Manager - Futura Expertise</p>
           <p className="mt-1.5 text-hintText">Mot de passe : Password123!</p>
         </div>
       </div>

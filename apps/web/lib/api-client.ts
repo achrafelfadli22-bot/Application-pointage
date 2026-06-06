@@ -2,7 +2,7 @@
 
 import type { ApiResponse } from '@pointage360/types';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
 export type LoginPayload = {
   email: string;
@@ -134,6 +134,8 @@ export const api = {
     apiRequest('/projects', { method: 'POST', body: JSON.stringify(data) }),
   updateProject: (id: string, data: Record<string, unknown>) =>
     apiRequest(`/projects/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteProject: (id: string) =>
+    apiRequest(`/projects/${id}`, { method: 'DELETE' }),
   sites: () => apiRequest('/sites'),
   site: (id: string) => apiRequest(`/sites/${id}`),
   attendance: () => apiRequest('/attendance'),
@@ -211,6 +213,12 @@ export const api = {
   settingsTimesheetTaskTypes: () => apiRequest('/settings/timesheet-task-types'),
   updateSettingsTimesheetTaskTypes: (data: Record<string, unknown>) =>
     apiRequest('/settings/timesheet-task-types', { method: 'PUT', body: JSON.stringify(data) }),
+  settingsTimesheet: () => apiRequest('/settings/timesheet'),
+  updateSettingsTimesheet: (data: Record<string, unknown>) =>
+    apiRequest('/settings/timesheet', { method: 'PUT', body: JSON.stringify(data) }),
+  settingsSiteOptions: () => apiRequest('/settings/site-options'),
+  updateSettingsSiteOptions: (data: Record<string, unknown>) =>
+    apiRequest('/settings/site-options', { method: 'PUT', body: JSON.stringify(data) }),
   createEmployee: (data: Record<string, unknown>) =>
     apiRequest('/employees', { method: 'POST', body: JSON.stringify(data) }),
   updateEmployee: (id: string, data: Record<string, unknown>) =>
@@ -219,6 +227,8 @@ export const api = {
     apiRequest('/sites', { method: 'POST', body: JSON.stringify(data) }),
   updateSite: (id: string, data: Record<string, unknown>) =>
     apiRequest(`/sites/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteSite: (id: string) =>
+    apiRequest(`/sites/${id}`, { method: 'DELETE' }),
   assignSite: (id: string, data: Record<string, unknown>) =>
     apiRequest(`/sites/${id}/assignments`, { method: 'POST', body: JSON.stringify(data) }),
   notifications: () => apiRequest('/notifications'),
@@ -237,7 +247,12 @@ export const api = {
   settingsAttendance: () => apiRequest('/settings/attendance'),
   updateSettingsAttendance: (data: Record<string, unknown>) =>
     apiRequest('/settings/attendance', { method: 'PUT', body: JSON.stringify(data) }),
-  auditLogs: (take = 100) => apiRequest(`/audit-logs?take=${take}`),
+  auditLogs: (params: { take?: number; cursor?: string } = {}) => {
+    const query = new URLSearchParams();
+    query.set('take', String(params.take ?? 100));
+    if (params.cursor) query.set('cursor', params.cursor);
+    return apiRequest(`/audit-logs?${query}`);
+  },
   forgotPassword: (email: string) =>
     apiRequest('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
   resetPassword: (token: string, password: string) =>

@@ -11,13 +11,28 @@ import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
 import { DataTable } from '@/components/ui/data-table';
 import { SelectField, FormField, DateField } from '@/components/ui/form-fields';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { api } from '@/lib/api-client';
-import { demoEmployees } from '@/lib/demo-data';
+import { api, tokenStore } from '@/lib/api-client';
 import { ROLE_LABELS } from '@/lib/nav-items';
 import { useApiData } from '@/lib/use-api-data';
 import { CsvImportModal } from '@/components/domain/csv-import-modal';
 
-type Employee = (typeof demoEmployees)[number];
+type Employee = {
+  id: string;
+  employeeNumber: string;
+  jobTitle: string;
+  annualLeaveBalance: number;
+  status: string;
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone?: string | null;
+    role: string;
+    status: string;
+  };
+  mainSite?: { id: string; code: string; name: string; city?: string | null } | null;
+};
 
 // ─── Modal Nouvel Employé ────────────────────────────────────────────────────
 
@@ -99,7 +114,7 @@ function NewEmployeeModal({ onCreated }: { onCreated: () => void }) {
                   className="h-10 rounded-md border border-borderSoft bg-white px-3 text-sm outline-none focus:border-accent"
                 >
                   <option value="EMPLOYEE">Employé</option>
-                  <option value="MANAGER">Manager chantier</option>
+                  <option value="MANAGER">Chef de site</option>
                   <option value="PROJECT_MANAGER">Chef de projet</option>
                   <option value="HR">RH</option>
                   <option value="RESOURCE_MANAGER">Ressource Manager</option>
@@ -146,14 +161,16 @@ export default function TeamPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [siteFilter, setSiteFilter] = useState('');
-  const { data, refresh } = useApiData<Employee[]>(() => api.employees() as Promise<Employee[]>, demoEmployees);
+  const myRole = tokenStore.session?.role ?? '';
+  const canManageEmployees = myRole === 'RESOURCE_MANAGER';
+  const { data, refresh } = useApiData<Employee[]>(() => api.employees() as Promise<Employee[]>, []);
   const { data: sites } = useApiData<Site[]>(() => api.sites() as Promise<Site[]>, []);
 
   const filtered = data.filter((e) => {
     const q = search.toLowerCase();
     if (q && !`${e.user.firstName} ${e.user.lastName} ${e.user.email} ${e.employeeNumber}`.toLowerCase().includes(q)) return false;
     if (roleFilter && e.user.role !== roleFilter) return false;
-    if (siteFilter && e.mainSite?.name !== siteFilter) return false;
+    if (siteFilter && e.mainSite?.id !== siteFilter) return false;
     return true;
   });
 
@@ -182,12 +199,12 @@ export default function TeamPage() {
         <PageHeader
           title="Mon équipe"
           description="Employés, rôles, affectations chantier et statut RH."
-          actions={
+          actions={canManageEmployees ? (
             <div className="flex items-center gap-2">
               <CsvImportModal onImported={refresh} />
               <NewEmployeeModal onCreated={refresh} />
             </div>
-          }
+          ) : undefined}
         />
 
         <div className="grid gap-3 rounded-xl border border-borderSoft bg-surface p-4 shadow-card md:grid-cols-3">
@@ -200,7 +217,7 @@ export default function TeamPage() {
           <SelectField label="Rôle" value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
             <option value="">Tous les rôles</option>
             <option value="EMPLOYEE">Employé</option>
-            <option value="MANAGER">Manager chantier</option>
+            <option value="MANAGER">Chef de site</option>
             <option value="PROJECT_MANAGER">Chef de projet</option>
             <option value="HR">RH</option>
             <option value="RESOURCE_MANAGER">Ressource Manager</option>
@@ -208,7 +225,7 @@ export default function TeamPage() {
           <SelectField label="Chantier" value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)}>
             <option value="">Tous les chantiers</option>
             {sites.map((s) => (
-              <option key={s.id} value={s.name}>{s.code} — {s.name}</option>
+              <option key={s.id} value={s.id}>{s.code} - {s.name}</option>
             ))}
           </SelectField>
         </div>

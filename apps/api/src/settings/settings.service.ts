@@ -7,6 +7,8 @@ import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateHolidayDto } from './dto/update-holiday.dto';
 import { UpdateLeaveTypeDto } from './dto/update-leave-type.dto';
+import { UpdateSiteOptionsDto } from './dto/update-site-options.dto';
+import { UpdateTimesheetSettingsDto } from './dto/update-timesheet-settings.dto';
 import { UpdateTimesheetTaskTypesDto } from './dto/update-timesheet-task-types.dto';
 
 const DEFAULT_TIMESHEET_TASK_TYPES = [
@@ -16,6 +18,17 @@ const DEFAULT_TIMESHEET_TASK_TYPES = [
   { value: 'CONTROLE_QUALITE', label: 'Controle qualite', isActive: true },
   { value: 'ADMINISTRATIF', label: 'Administratif', isActive: true },
   { value: 'AUTRE', label: 'Autre', isActive: true },
+];
+
+const DEFAULT_SITE_ROLE_OPTIONS = [
+  'Chef de site',
+  'Chef d equipe',
+  'Technicien',
+  'Electricien',
+  'Aide electricien',
+  'Controle qualite',
+  'HSE',
+  'Administratif chantier',
 ];
 
 @Injectable()
@@ -122,6 +135,94 @@ export class SettingsService {
 
   // ─── Paramètres de pointage ────────────────────────────────────────────────
 
+  async timesheetSettings(user: CurrentUserContext) {
+    const tenantId = this.requireTenant(user);
+    const settings = await this.prisma.tenantSettings.upsert({
+      where: { tenantId },
+      create: { tenantId },
+      update: {},
+    });
+
+    return { timesheetPeriodDays: settings.timesheetPeriodDays };
+  }
+
+  async updateTimesheetSettings(user: CurrentUserContext, dto: UpdateTimesheetSettingsDto) {
+    const tenantId = this.requireTenant(user);
+    const settings = await this.prisma.tenantSettings.upsert({
+      where: { tenantId },
+      create: {
+        tenantId,
+        timesheetPeriodDays: dto.timesheetPeriodDays ?? 7,
+      },
+      update: {
+        ...(dto.timesheetPeriodDays !== undefined && { timesheetPeriodDays: dto.timesheetPeriodDays }),
+      },
+    });
+
+    return { timesheetPeriodDays: settings.timesheetPeriodDays };
+  }
+
+  async siteOptions(user: CurrentUserContext) {
+    const tenantId = this.requireTenant(user);
+    const settings = await this.prisma.tenantSettings.upsert({
+      where: { tenantId },
+      create: { tenantId, siteRoleOptions: DEFAULT_SITE_ROLE_OPTIONS },
+      update: {},
+    });
+
+    const [projects, sites] = await Promise.all([
+      this.prisma.project.findMany({
+        where: { tenantId, deletedAt: null, clientName: { not: null } },
+        select: { clientName: true },
+      }),
+      this.prisma.site.findMany({
+        where: { tenantId, deletedAt: null },
+        select: { clientName: true },
+      }),
+    ]);
+
+    const existingClients = [
+      ...projects.map((project) => project.clientName),
+      ...sites.map((site) => site.clientName),
+    ].filter(Boolean) as string[];
+    const configuredClients = this.normalizeStringOptions(settings.clientOptions, []);
+
+    return {
+      siteRoleOptions: this.normalizeStringOptions(settings.siteRoleOptions, DEFAULT_SITE_ROLE_OPTIONS),
+      clientOptions: this.normalizeStringOptions([...configuredClients, ...existingClients], []),
+    };
+  }
+
+  async updateSiteOptions(user: CurrentUserContext, dto: UpdateSiteOptionsDto) {
+    const tenantId = this.requireTenant(user);
+    const current = await this.prisma.tenantSettings.upsert({
+      where: { tenantId },
+      create: { tenantId, siteRoleOptions: DEFAULT_SITE_ROLE_OPTIONS },
+      update: {},
+    });
+    const siteRoleOptions =
+      dto.siteRoleOptions === undefined
+        ? this.normalizeStringOptions(current.siteRoleOptions, DEFAULT_SITE_ROLE_OPTIONS)
+        : this.normalizeStringOptions(dto.siteRoleOptions, DEFAULT_SITE_ROLE_OPTIONS, true, 'role sur site');
+    const clientOptions =
+      dto.clientOptions === undefined
+        ? this.normalizeStringOptions(current.clientOptions, [])
+        : this.normalizeStringOptions(dto.clientOptions, []);
+
+    const settings = await this.prisma.tenantSettings.update({
+      where: { tenantId },
+      data: {
+        ...(dto.siteRoleOptions !== undefined && { siteRoleOptions }),
+        ...(dto.clientOptions !== undefined && { clientOptions }),
+      },
+    });
+
+    return {
+      siteRoleOptions: this.normalizeStringOptions(settings.siteRoleOptions, DEFAULT_SITE_ROLE_OPTIONS),
+      clientOptions: this.normalizeStringOptions(settings.clientOptions, []),
+    };
+  }
+
   async attendanceSettings(user: CurrentUserContext) {
     const tenantId = this.requireTenant(user);
     // upsert: return existing or default record
@@ -208,5 +309,29 @@ export class SettingsService {
       .replace(/[^a-zA-Z0-9]+/g, '_')
       .replace(/^_+|_+$/g, '')
       .toUpperCase();
+  }
+
+  private normalizeStringOptions(input: unknown, fallback: string[], strict = false, label = 'option') {
+    const raw = Array.isArray(input) ? input : fallback;
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+
+    for (const item of raw) {
+      const value = String(item ?? '').trim();
+      if (!value) continue;
+
+      const key = value.toLocaleLowerCase('fr-FR');
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      normalized.push(value);
+    }
+
+    if (!normalized.length) {
+      if (strict) throw new BadRequestException(`Au moins un ${label} est requis.`);
+      return fallback;
+    }
+
+    return normalized;
   }
 }

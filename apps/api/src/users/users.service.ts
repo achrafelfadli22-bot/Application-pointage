@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import { AuthContextCacheService } from '../common/auth-context-cache.service';
 import { assertStrongPassword } from '../common/password-policy';
 import { CurrentUserContext } from '../common/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -13,6 +14,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly authContextCache: AuthContextCacheService,
   ) {}
 
   findAll(user: CurrentUserContext) {
@@ -68,7 +70,7 @@ export class UsersService {
     assertStrongPassword(dto.password, this.config);
     const passwordHash = dto.password ? await bcrypt.hash(dto.password, 12) : undefined;
 
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id },
       data: {
         email: dto.email?.toLowerCase(),
@@ -80,6 +82,10 @@ export class UsersService {
         status: dto.status,
       },
     });
+
+    await this.authContextCache.clearUser(id);
+
+    return updated;
   }
 
   private tenantWhere(user: CurrentUserContext) {

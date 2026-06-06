@@ -5,6 +5,8 @@ import { JwtService } from '@nestjs/jwt';
 import { UserStatus } from '@prisma/client';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator';
 import { permissionsForRole } from '../permissions';
+import { AuthContextCacheService } from '../auth-context-cache.service';
+import { CurrentUserContext } from '../types';
 import { PrismaService } from '../../prisma/prisma.service';
 
 type JwtPayload = {
@@ -19,6 +21,7 @@ export class JwtAuthGuard implements CanActivate {
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
     private readonly prisma: PrismaService,
+    private readonly authContextCache: AuthContextCacheService,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -31,7 +34,7 @@ export class JwtAuthGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<{ headers: Record<string, string>; user?: unknown }>();
+    const request = context.switchToHttp().getRequest<{ headers: Record<string, string>; user?: CurrentUserContext }>();
     const authorization = request.headers.authorization;
     const token = authorization?.startsWith('Bearer ') ? authorization.slice(7) : null;
 
@@ -52,20 +55,26 @@ export class JwtAuthGuard implements CanActivate {
       throw new UnauthorizedException('Invalid token type');
     }
 
+    const cachedUser = await this.authContextCache.getUser(payload.sub);
+    if (cachedUser) {
+      request.user = cachedUser;
+      return true;
+    }
+
     const user = await this.prisma.user.findFirst({
       where: {
         id: payload.sub,
         deletedAt: null,
         status: UserStatus.ACTIVE,
       },
-      include: { tenant: true },
+      include: { tenant: { select: { id: true, status: true } } },
     });
 
     if (!user) {
       throw new UnauthorizedException('User is not active');
     }
 
-    request.user = {
+    const currentUser: CurrentUserContext = {
       userId: user.id,
       tenantId: user.tenantId,
       role: user.role,
@@ -73,6 +82,12 @@ export class JwtAuthGuard implements CanActivate {
       email: user.email,
       fullName: `${user.firstName} ${user.lastName}`,
     };
+    request.user = currentUser;
+
+    await Promise.all([
+      this.authContextCache.setUser(currentUser),
+      user.tenant ? this.authContextCache.setTenant(user.tenant) : Promise.resolve(),
+    ]);
 
     return true;
   }

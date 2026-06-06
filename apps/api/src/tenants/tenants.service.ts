@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { TenantStatus } from '@prisma/client';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuthContextCacheService } from '../common/auth-context-cache.service';
 import { CurrentUserContext } from '../common/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateSubscriptionPlanDto } from './dto/create-subscription-plan.dto';
@@ -14,6 +15,7 @@ export class TenantsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly auditLog: AuditLogService,
+    private readonly authContextCache: AuthContextCacheService,
   ) {}
 
   findAll() {
@@ -78,6 +80,8 @@ export class TenantsService {
       },
     });
 
+    await this.authContextCache.clearTenant(id);
+
     return tenant;
   }
 
@@ -96,6 +100,8 @@ export class TenantsService {
       entityId: id,
       metadata: { oldStatus: before.status, newStatus: tenant.status },
     });
+
+    await this.authContextCache.clearTenant(id);
 
     return tenant;
   }
@@ -120,6 +126,8 @@ export class TenantsService {
       metadata: { oldStatus: before.status, newStatus: tenant.status },
     });
 
+    await this.authContextCache.clearTenant(id);
+
     return tenant;
   }
 
@@ -138,6 +146,8 @@ export class TenantsService {
       entityId: id,
       metadata: { oldStatus: before.status, newStatus: tenant.status },
     });
+
+    await this.authContextCache.clearTenant(id);
 
     return tenant;
   }

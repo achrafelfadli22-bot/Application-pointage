@@ -35,16 +35,32 @@ export class HierarchyService {
       return [user.userId];
     }
 
+    const siteIds = sites.map((site) => site.id);
     const assignments = await this.prisma.siteAssignment.findMany({
       where: {
         tenantId: user.tenantId,
-        siteId: { in: sites.map((site) => site.id) },
+        siteId: { in: siteIds },
         ...this.activeAssignmentWhere(),
       },
       select: { userId: true },
     });
 
-    return [...new Set([user.userId, ...assignments.map((assignment) => assignment.userId)])];
+    const mainSiteEmployees = await this.prisma.employeeProfile.findMany({
+      where: {
+        tenantId: user.tenantId,
+        mainSiteId: { in: siteIds },
+        user: { deletedAt: null },
+      },
+      select: { userId: true },
+    });
+
+    return [
+      ...new Set([
+        user.userId,
+        ...assignments.map((assignment) => assignment.userId),
+        ...mainSiteEmployees.map((employee) => employee.userId),
+      ]),
+    ];
   }
 
   async approvalLevelFor(

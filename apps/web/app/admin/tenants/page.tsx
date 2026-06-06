@@ -12,8 +12,7 @@ import { api } from '@/lib/api-client';
 import { useApiData } from '@/lib/use-api-data';
 
 const fallback = [
-  { id: 'tenant-a', name: 'Société Alpha BTP',          slug: 'societe-alpha-btp',          status: 'ACTIVE', subscriptionPlan: { name: 'Pro' },   _count: { users: 19, sites: 3 } },
-  { id: 'tenant-b', name: 'Société Atlas Construction', slug: 'societe-atlas-construction', status: 'TRIAL',  subscriptionPlan: { name: 'Essai' }, _count: { users: 2,  sites: 2 } },
+  { id: 'tenant-futura', name: 'Futura Expertise', slug: 'futura-expertise', status: 'ACTIVE', subscriptionPlan: { name: 'Enterprise' }, _count: { users: 6, sites: 5 } },
 ];
 
 type Tenant = (typeof fallback)[number];

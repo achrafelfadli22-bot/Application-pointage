@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Prisma, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 import { AuditLogService } from '../audit-log/audit-log.service';
+import { AuthContextCacheService } from '../common/auth-context-cache.service';
 import { HierarchyService } from '../common/hierarchy.service';
 import { assertStrongPassword } from '../common/password-policy';
 import { CurrentUserContext } from '../common/types';
@@ -24,6 +25,7 @@ export class EmployeesService {
     private readonly auditLog: AuditLogService,
     private readonly config: ConfigService,
     private readonly hierarchy: HierarchyService,
+    private readonly authContextCache: AuthContextCacheService,
   ) {}
 
   async findAll(user: CurrentUserContext, filters: EmployeeFilters) {
@@ -185,6 +187,8 @@ export class EmployeesService {
       entityId: id,
     });
 
+    await this.authContextCache.clearUser(employee.userId);
+
     return updated;
   }
 
@@ -209,6 +213,8 @@ export class EmployeesService {
       entityType: 'User',
       entityId: deleted.id,
     });
+
+    await this.authContextCache.clearUser(deleted.id);
 
     return deleted;
   }

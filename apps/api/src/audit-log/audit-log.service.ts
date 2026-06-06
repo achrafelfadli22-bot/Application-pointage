@@ -14,6 +14,11 @@ export type AuditLogInput = {
   userAgent?: string;
 };
 
+export type AuditLogQuery = {
+  take?: number;
+  cursor?: string;
+};
+
 @Injectable()
 export class AuditLogService {
   constructor(private readonly prisma: PrismaService) {}
@@ -33,12 +38,21 @@ export class AuditLogService {
     });
   }
 
-  findAll(user: CurrentUserContext, take = 50) {
-    return this.prisma.auditLog.findMany({
+  async findAll(user: CurrentUserContext, query: AuditLogQuery = {}) {
+    const take = Math.min(Math.max(Number(query.take ?? 50) || 50, 1), 100);
+    const rows = await this.prisma.auditLog.findMany({
       where: user.role === 'SUPER_ADMIN' ? {} : { tenantId: user.tenantId },
-      orderBy: { createdAt: 'desc' },
-      take: Math.min(take, 200),
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: take + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
       include: { user: { select: { id: true, firstName: true, lastName: true, email: true } } },
     });
+
+    const next = rows.length > take ? rows.pop() : null;
+
+    return {
+      data: rows,
+      nextCursor: next?.id ?? null,
+    };
   }
 }

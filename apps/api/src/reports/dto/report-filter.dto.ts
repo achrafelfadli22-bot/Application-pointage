@@ -1,5 +1,19 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString } from 'class-validator';
+
+export enum ReportStatusFilter {
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  SUSPENDED = 'SUSPENDED',
+  COMPLETED = 'COMPLETED',
+  DRAFT = 'DRAFT',
+  SUBMITTED = 'SUBMITTED',
+  N1_APPROVED = 'N1_APPROVED',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  REOPENED = 'REOPENED',
+  CANCELLED = 'CANCELLED',
+}
 
 export class ReportFilterDto {
   @ApiPropertyOptional()
@@ -22,8 +36,8 @@ export class ReportFilterDto {
   @IsString()
   userId?: string;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: ReportStatusFilter })
   @IsOptional()
-  @IsString()
-  status?: string;
+  @IsEnum(ReportStatusFilter)
+  status?: ReportStatusFilter;
 }

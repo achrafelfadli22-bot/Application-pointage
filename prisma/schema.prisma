@@ -568,7 +568,10 @@ model TenantSettings {
   lateToleranceMinutes Int      @default(15)
   gpsToleranceMeters   Int      @default(150)
   overtimeTriggerHours Int      @default(8)
+  timesheetPeriodDays  Int      @default(7)
   timesheetTaskTypes   Json     @default("[]")
+  siteRoleOptions      Json     @default("[]")
+  clientOptions        Json     @default("[]")
   updatedAt            DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)

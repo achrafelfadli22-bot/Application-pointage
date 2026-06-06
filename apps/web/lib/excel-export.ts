@@ -15,6 +15,7 @@ export type ExcelColumn = {
   key: string;
   width?: number;            // characters
   type?: 'text' | 'number' | 'date';
+  style?: 'total';
 };
 
 export type ExcelSheet = {
@@ -23,6 +24,8 @@ export type ExcelSheet = {
   rows: Record<string, CellValue>[];
   /** Optional totals row appended at the bottom (bold) */
   totals?: Record<string, CellValue>;
+  /** Optional fixed rows rendered before the table header. */
+  preRows?: CellValue[][];
 };
 
 // ─── Entry point ──────────────────────────────────────────────────────────────
@@ -79,49 +82,63 @@ function buildXlsx(sheets: ExcelSheet[]): Blob {
 
 function buildSheet(sheet: ExcelSheet, sst: SharedStringTable): string {
   const cols = sheet.columns;
-  const colCount = cols.length;
+  const preRows = sheet.preRows ?? [];
+  const preRowColCount = preRows.reduce((max, row) => Math.max(max, row.length), 0);
+  const colCount = Math.max(cols.length, preRowColCount);
 
   // Column widths
-  const colsXml = cols.map((c, i) =>
-    `<col min="${i + 1}" max="${i + 1}" width="${c.width ?? 15}" bestFit="1" customWidth="1"/>`,
-  ).join('');
+  const colsXml = Array.from({ length: colCount }, (_, i) => {
+    const c = cols[i];
+    return `<col min="${i + 1}" max="${i + 1}" width="${c?.width ?? 15}" bestFit="1" customWidth="1"/>`;
+  }).join('');
 
   const rows: string[] = [];
 
+  // Fixed rows above the table header.
+  preRows.forEach((row, ri) => {
+    const cells = row.map((val, ci) => buildCell(cellAddress(ci, ri), val, 'text', sst, ci === 0 ? 1 : 0));
+    rows.push(`<row r="${ri + 1}">${cells.join('')}</row>`);
+  });
+
+  const headerIndex = preRows.length;
+
   // Header row (style 1 = bold + fill)
   const headerCells = cols.map((c, ci) => {
-    const addr = cellAddress(ci, 0);
+    const addr = cellAddress(ci, headerIndex);
     const si = sst.add(c.header);
-    return `<c r="${addr}" t="s" s="1"><v>${si}</v></c>`;
+    return `<c r="${addr}" t="s" s="${c.style === 'total' ? 7 : 1}"><v>${si}</v></c>`;
   });
-  rows.push(`<row r="1" s="1" customFormat="1">${headerCells.join('')}</row>`);
+  rows.push(`<row r="${headerIndex + 1}" s="1" customFormat="1">${headerCells.join('')}</row>`);
 
   // Data rows
   sheet.rows.forEach((row, ri) => {
-    const rowNum = ri + 2;
+    const rowIndex = headerIndex + ri + 1;
+    const rowNum = rowIndex + 1;
     const styleIdx = ri % 2 === 0 ? 2 : 3; // alternating: white / light grey
     const cells = cols.map((col, ci) => {
-      const addr = cellAddress(ci, ri + 1);
+      const addr = cellAddress(ci, rowIndex);
       const val  = row[col.key];
-      return buildCell(addr, val, col.type ?? 'text', sst, styleIdx);
+      return buildCell(addr, val, col.type ?? 'text', sst, col.style === 'total' ? 6 : styleIdx);
     });
     rows.push(`<row r="${rowNum}">${cells.join('')}</row>`);
   });
 
   // Totals row (if provided)
   if (sheet.totals) {
-    const rowNum = sheet.rows.length + 2;
+    const rowIndex = headerIndex + sheet.rows.length + 1;
+    const rowNum = rowIndex + 1;
     const cells = cols.map((col, ci) => {
-      const addr = cellAddress(ci, sheet.rows.length + 1);
+      const addr = cellAddress(ci, rowIndex);
       const val  = sheet.totals![col.key];
-      return buildCell(addr, val, col.type ?? 'text', sst, 4); // bold style
+      return buildCell(addr, val, col.type ?? 'text', sst, col.style === 'total' ? 7 : 4); // bold style
     });
     rows.push(`<row r="${rowNum}" s="1" customFormat="1">${cells.join('')}</row>`);
   }
 
-  const lastRow = sheet.rows.length + (sheet.totals ? 2 : 1);
+  const lastRow = preRows.length + sheet.rows.length + (sheet.totals ? 2 : 1);
   const lastCol = colNumberToLetter(colCount - 1);
   const dimension = `A1:${lastCol}${lastRow}`;
+  const freezeSplit = preRows.length + 1;
 
   return [
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>`,
@@ -129,7 +146,7 @@ function buildSheet(sheet: ExcelSheet, sst: SharedStringTable): string {
     ` xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">`,
     `<dimension ref="${dimension}"/>`,
     `<sheetViews><sheetView tabSelected="1" workbookViewId="0">`,
-    `<pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/>`,
+    `<pane ySplit="${freezeSplit}" topLeftCell="A${freezeSplit + 1}" activePane="bottomLeft" state="frozen"/>`,
     `</sheetView></sheetViews>`,
     `<sheetFormatPr defaultRowHeight="15"/>`,
     `<cols>${colsXml}</cols>`,
@@ -197,12 +214,13 @@ function stylesXml(): string {
     <font><b/><sz val="11"/><name val="Calibri"/></font>
     <font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/></font>
   </fonts>
-  <fills count="5">
+  <fills count="6">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FF1E3A5F"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFF0F4FA"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFFFFFFF"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFFFFF00"/></patternFill></fill>
   </fills>
   <borders count="2">
     <border><left/><right/><top/><bottom/><diagonal/></border>
@@ -214,7 +232,7 @@ function stylesXml(): string {
     </border>
   </borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="6">
+  <cellXfs count="8">
     <!-- 0: default -->
     <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>
     <!-- 1: header (dark blue bg, white bold) -->
@@ -227,6 +245,10 @@ function stylesXml(): string {
     <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
     <!-- 5: date format -->
     <xf numFmtId="14" fontId="0" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>
+    <!-- 6: yellow total column -->
+    <xf numFmtId="0" fontId="0" fillId="5" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>
+    <!-- 7: yellow total header / total row -->
+    <xf numFmtId="0" fontId="1" fillId="5" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/>
   </cellXfs>
 </styleSheet>`;
 }

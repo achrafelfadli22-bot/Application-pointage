@@ -49,12 +49,12 @@ type LeaveType = {
 
 const demoCompany: Company = {
   id: 'demo',
-  name: 'Societe Alpha BTP',
-  email: 'admin@societe-a.test',
-  phone: '+212 522 000 001',
-  address: '12 Rue des Chantiers',
+  name: 'Futura Expertise',
+  email: 'contact@futura-expert.com',
+  phone: '+212 6 61 64 00 26',
+  address: 'N 18 Office JAD, Bd Moulouya, El Oulfa',
   city: 'Casablanca',
-  country: 'MA',
+  country: 'Maroc',
   status: 'ACTIVE',
 };
 
@@ -72,7 +72,7 @@ const demoLeaveTypes: LeaveType[] = [
 
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
 
-const TABS = ['Societe', 'Jours feries', 'Types de conges', 'Types timesheet', 'Pointage'] as const;
+const TABS = ['Societe', 'Jours feries', 'Types de conges', 'Types timesheet', 'Chantiers', 'Pointage'] as const;
 type Tab = (typeof TABS)[number];
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
@@ -586,12 +586,25 @@ function LeaveTypesTab() {
 // ─── Attendance Settings tab ──────────────────────────────────────────────────
 
 type TimesheetTaskTypeForm = TimesheetTaskType;
+type TimesheetSettings = { timesheetPeriodDays: number };
+type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[] };
 
 const emptyTimesheetTaskType: TimesheetTaskTypeForm = {
   value: '',
   label: '',
   isActive: true,
 };
+
+const defaultSiteRoleOptions = [
+  'Chef de site',
+  'Chef d equipe',
+  'Technicien',
+  'Electricien',
+  'Aide electricien',
+  'Controle qualite',
+  'HSE',
+  'Administratif chantier',
+];
 
 function TimesheetTaskTypesTab() {
   const canEdit = tokenStore.session?.role === 'RESOURCE_MANAGER';
@@ -600,14 +613,18 @@ function TimesheetTaskTypesTab() {
   const [showForm, setShowForm] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [form, setForm] = useState<TimesheetTaskTypeForm>(emptyTimesheetTaskType);
+  const [periodDays, setPeriodDays] = useState(7);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    api
-      .settingsTimesheetTaskTypes()
-      .then((data) => setTypes(data as TimesheetTaskType[]))
+    Promise.all([api.settingsTimesheetTaskTypes(), api.settingsTimesheet()])
+      .then(([taskTypesData, settingsData]) => {
+        const settings = settingsData as TimesheetSettings;
+        setTypes(taskTypesData as TimesheetTaskType[]);
+        setPeriodDays(Math.max(1, Math.min(31, settings.timesheetPeriodDays || 7)));
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
@@ -678,8 +695,13 @@ function TimesheetTaskTypesTab() {
     setSuccess(false);
     setError(null);
     try {
-      const updated = await api.updateSettingsTimesheetTaskTypes({ types });
+      const safePeriodDays = Math.max(1, Math.min(31, Number(periodDays) || 7));
+      const [updated, updatedSettings] = await Promise.all([
+        api.updateSettingsTimesheetTaskTypes({ types }),
+        api.updateSettingsTimesheet({ timesheetPeriodDays: safePeriodDays }),
+      ]);
       setTypes(updated as TimesheetTaskType[]);
+      setPeriodDays((updatedSettings as TimesheetSettings).timesheetPeriodDays);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (e) {
@@ -714,6 +736,21 @@ function TimesheetTaskTypesTab() {
           Liste en lecture seule. La modification est reservee au Ressource Manager.
         </div>
       )}
+
+      <div className="border border-borderSoft bg-surfaceHover p-4">
+        <label className="grid max-w-xs gap-1">
+          <span className="text-sm font-semibold text-bodyText">Nombre de jours par timesheet</span>
+          <input
+            type="number"
+            min={1}
+            max={31}
+            value={periodDays}
+            disabled={!canEdit}
+            onChange={(e) => setPeriodDays(Math.max(1, Math.min(31, Number(e.target.value) || 1)))}
+            className="h-10 rounded-md border border-borderSoft bg-white px-3 text-sm outline-none focus:border-accent disabled:bg-grayCard disabled:text-mutedText"
+          />
+        </label>
+      </div>
 
       {showForm && (
         <div className="border border-borderSoft bg-surfaceHover p-4">
@@ -818,6 +855,216 @@ function TimesheetTaskTypesTab() {
       <div className="flex items-center gap-3">
         {success && <span className="text-sm font-semibold text-green-600">Modifie avec succes</span>}
         {error && !showForm && <span className="text-sm text-dangerText">{error}</span>}
+      </div>
+    </div>
+  );
+}
+
+function SiteOptionsTab() {
+  const canEdit = tokenStore.session?.role === 'RESOURCE_MANAGER';
+  const [siteRoleOptions, setSiteRoleOptions] = useState<string[]>(defaultSiteRoleOptions);
+  const [clientOptions, setClientOptions] = useState<string[]>([]);
+  const [siteRoleInput, setSiteRoleInput] = useState('');
+  const [clientInput, setClientInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [success, setSuccess] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    api
+      .settingsSiteOptions()
+      .then((data) => {
+        const options = data as SiteOptions;
+        setSiteRoleOptions(options.siteRoleOptions?.length ? options.siteRoleOptions : defaultSiteRoleOptions);
+        setClientOptions(options.clientOptions ?? []);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  function normalizeOptions(options: string[]) {
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+
+    for (const option of options) {
+      const value = option.trim();
+      if (!value) continue;
+
+      const key = value.toLocaleLowerCase('fr-FR');
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      normalized.push(value);
+    }
+
+    return normalized;
+  }
+
+  function addOption(kind: 'role' | 'client') {
+    if (!canEdit) return;
+
+    const value = (kind === 'role' ? siteRoleInput : clientInput).trim();
+    if (!value) return;
+
+    const options = kind === 'role' ? siteRoleOptions : clientOptions;
+    const duplicate = options.some((option) => option.toLocaleLowerCase('fr-FR') === value.toLocaleLowerCase('fr-FR'));
+    if (duplicate) {
+      setError('Cette option existe deja.');
+      return;
+    }
+
+    if (kind === 'role') {
+      setSiteRoleOptions((previous) => [...previous, value]);
+      setSiteRoleInput('');
+    } else {
+      setClientOptions((previous) => [...previous, value]);
+      setClientInput('');
+    }
+    setError(null);
+  }
+
+  function updateOption(kind: 'role' | 'client', index: number, value: string) {
+    if (!canEdit) return;
+    const setter = kind === 'role' ? setSiteRoleOptions : setClientOptions;
+    setter((previous) => previous.map((option, optionIndex) => (optionIndex === index ? value : option)));
+  }
+
+  function deleteOption(kind: 'role' | 'client', index: number) {
+    if (!canEdit) return;
+    const setter = kind === 'role' ? setSiteRoleOptions : setClientOptions;
+    setter((previous) => previous.filter((_, optionIndex) => optionIndex !== index));
+  }
+
+  async function handleSave() {
+    if (!canEdit) {
+      setError('Seul le Ressource Manager peut enregistrer ces parametres.');
+      return;
+    }
+
+    const cleanedRoles = normalizeOptions(siteRoleOptions);
+    const cleanedClients = normalizeOptions(clientOptions);
+
+    if (!cleanedRoles.length) {
+      setError('Au moins un role sur site est requis.');
+      return;
+    }
+
+    setSaving(true);
+    setSuccess(false);
+    setError(null);
+    try {
+      const updated = (await api.updateSettingsSiteOptions({
+        siteRoleOptions: cleanedRoles,
+        clientOptions: cleanedClients,
+      })) as SiteOptions;
+      setSiteRoleOptions(updated.siteRoleOptions?.length ? updated.siteRoleOptions : defaultSiteRoleOptions);
+      setClientOptions(updated.clientOptions ?? []);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Erreur de sauvegarde');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function renderOptionGroup(
+    title: string,
+    options: string[],
+    input: string,
+    setInput: (value: string) => void,
+    kind: 'role' | 'client',
+  ) {
+    return (
+      <div className="grid gap-3 border border-borderSoft bg-surfaceHover p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-bold text-bodyText">{title}</p>
+            <p className="mt-0.5 text-xs text-mutedText">{options.length} option{options.length !== 1 ? 's' : ''}</p>
+          </div>
+          {canEdit && (
+            <SecondaryButton type="button" onClick={() => addOption(kind)}>
+              <Plus className="h-4 w-4" />
+              Ajouter
+            </SecondaryButton>
+          )}
+        </div>
+
+        {canEdit && (
+          <FormField
+            label="Nouvelle option"
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                addOption(kind);
+              }
+            }}
+          />
+        )}
+
+        <div className="grid gap-2">
+          {options.map((option, index) => (
+            <div key={`${kind}-${index}`} className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              {canEdit ? (
+                <FormField
+                  label={`Option ${index + 1}`}
+                  value={option}
+                  onChange={(event) => updateOption(kind, index, event.target.value)}
+                />
+              ) : (
+                <div className="rounded-md border border-borderSoft bg-surface px-3 py-2 text-sm font-medium text-bodyText">
+                  {option}
+                </div>
+              )}
+              {canEdit && (
+                <button
+                  type="button"
+                  onClick={() => deleteOption(kind, index)}
+                  className="flex h-9 w-9 items-center justify-center self-end rounded-md border border-borderSoft text-dangerText hover:bg-dangerBg"
+                  title="Supprimer"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ))}
+          {options.length === 0 && (
+            <div className="border border-dashed border-borderSoft px-4 py-6 text-center text-sm text-mutedText">
+              Aucune option configuree.
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return <div className="py-8 text-center text-sm text-mutedText">Chargement...</div>;
+  }
+
+  return (
+    <div className="grid gap-4 py-6">
+      {!canEdit && (
+        <div className="border border-borderSoft bg-grayCard px-4 py-3 text-sm text-mutedText">
+          Liste en lecture seule. La modification est reservee au Ressource Manager.
+        </div>
+      )}
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        {renderOptionGroup("Clients / Maitres d'ouvrage", clientOptions, clientInput, setClientInput, 'client')}
+        {renderOptionGroup('Roles sur site', siteRoleOptions, siteRoleInput, setSiteRoleInput, 'role')}
+      </div>
+
+      <div className="flex items-center gap-3">
+        <PrimaryButton type="button" onClick={handleSave} disabled={saving || !canEdit}>
+          <Save className="h-4 w-4" />
+          {saving ? 'Enregistrement...' : 'Enregistrer'}
+        </PrimaryButton>
+        {success && <span className="text-sm font-semibold text-green-600">Modifie avec succes</span>}
+        {error && <span className="text-sm text-dangerText">{error}</span>}
       </div>
     </div>
   );
@@ -977,7 +1224,7 @@ export default function SettingsPage() {
       <div className="grid gap-6">
         <PageHeader
           title="Paramètres"
-          description="Paramétrage tenant, jours fériés, types de congés, types timesheet et règles de pointage."
+          description="Paramétrage tenant, jours fériés, types de congés, types timesheet, chantiers et règles de pointage."
         />
         <div className="border border-borderSoft bg-surface shadow-card">
           <TabBar active={tab} onChange={setTab} />
@@ -986,6 +1233,7 @@ export default function SettingsPage() {
             {tab === 'Jours feries' && <HolidaysTab />}
             {tab === 'Types de conges' && <LeaveTypesTab />}
             {tab === 'Types timesheet' && <TimesheetTaskTypesTab />}
+            {tab === 'Chantiers' && <SiteOptionsTab />}
             {tab === 'Pointage' && <AttendanceSettingsTab />}
           </div>
         </div>

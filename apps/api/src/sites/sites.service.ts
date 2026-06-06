@@ -259,12 +259,17 @@ export class SitesService {
 
     const tenantId = user.tenantId ?? '__missing__';
     const ownAssignedSitesScope: Prisma.SiteWhereInput = {
-      assignments: {
-        some: {
-          userId: user.userId,
-          ...this.hierarchy.activeAssignmentWhere(),
+      OR: [
+        {
+          assignments: {
+            some: {
+              userId: user.userId,
+              ...this.hierarchy.activeAssignmentWhere(),
+            },
+          },
         },
-      },
+        { employeeProfiles: { some: { userId: user.userId } } },
+      ],
     };
 
     if (user.role === UserRole.PROJECT_MANAGER) {

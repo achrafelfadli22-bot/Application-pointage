@@ -1,17 +1,18 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { ColumnDef } from '@tanstack/react-table';
 import * as Dialog from '@radix-ui/react-dialog';
-import { ArrowLeft, MapPin, UserPlus, X } from 'lucide-react';
+import { ArrowLeft, MapPin, Pencil, Trash2, UserPlus, X } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { ProgressMeter } from '@/components/domain/progress-meter';
 import { SiteMap } from '@/components/domain/site-map';
 import { AccentCard, SummaryCounters } from '@/components/ui/cards';
-import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { DangerButton, PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DataTable } from '@/components/ui/data-table';
 import { DateField, FormField, SelectField } from '@/components/ui/form-fields';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -34,6 +35,9 @@ type Employee = {
   status: string;
   user: { id: string; firstName: string; lastName: string; email: string; role: string; status?: string };
 };
+
+type Project = { id: string; code: string; name: string };
+type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[] };
 
 type AttendancePunch = {
   id: string;
@@ -61,6 +65,7 @@ type Site = {
   gpsRadiusMeters: number;
   startDate?: string;
   plannedEndDate?: string;
+  project?: Project | null;
   manager?: { id: string; firstName: string; lastName: string; email: string } | null;
   assignments: Assignment[];
   attendancePunches: AttendancePunch[];
@@ -69,9 +74,9 @@ type Site = {
 
 const fallbackSite: Site = {
   id: 'demo',
-  code: 'CH-001',
-  name: 'Résidence Palmier',
-  clientName: 'Palmier Invest',
+  code: 'MPH',
+  name: 'MPH',
+  clientName: 'Futura Expertise',
   city: 'Casablanca',
   country: 'MA',
   status: 'ACTIVE',
@@ -96,26 +101,286 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function dateInput(value?: string | null) {
+  return value ? value.slice(0, 10) : '';
+}
+
+function optionalNumberInput(value?: number | string | null) {
+  return value == null ? '' : String(value);
+}
+
+const DEFAULT_SITE_ROLE_OPTIONS = [
+  'Chef de site',
+  'Chef d equipe',
+  'Technicien',
+  'Electricien',
+  'Aide electricien',
+  'Controle qualite',
+  'HSE',
+  'Administratif chantier',
+];
+
+function EditSiteModal({
+  site,
+  projects,
+  employees,
+  siteOptions,
+  onUpdated,
+}: {
+  site: Site;
+  projects: Project[];
+  employees: Employee[];
+  siteOptions: SiteOptions;
+  onUpdated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    projectId: site.project?.id ?? '',
+    code: site.code,
+    name: site.name,
+    clientName: site.clientName,
+    address: site.address ?? '',
+    city: site.city ?? '',
+    country: site.country ?? 'MA',
+    managerId: site.manager?.id ?? '',
+    startDate: dateInput(site.startDate),
+    plannedEndDate: dateInput(site.plannedEndDate),
+    status: site.status,
+    progressPercent: site.progressPercent ?? 0,
+    latitude: optionalNumberInput(site.latitude),
+    longitude: optionalNumberInput(site.longitude),
+    gpsRadiusMeters: site.gpsRadiusMeters ?? 150,
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      projectId: site.project?.id ?? '',
+      code: site.code,
+      name: site.name,
+      clientName: site.clientName,
+      address: site.address ?? '',
+      city: site.city ?? '',
+      country: site.country ?? 'MA',
+      managerId: site.manager?.id ?? '',
+      startDate: dateInput(site.startDate),
+      plannedEndDate: dateInput(site.plannedEndDate),
+      status: site.status,
+      progressPercent: site.progressPercent ?? 0,
+      latitude: optionalNumberInput(site.latitude),
+      longitude: optionalNumberInput(site.longitude),
+      gpsRadiusMeters: site.gpsRadiusMeters ?? 150,
+    });
+    setError(null);
+  }, [open, site]);
+
+  const managerOptions = employees
+    .filter((employee) => employee.status === 'ACTIVE')
+    .filter((employee) => employee.user.status !== 'INACTIVE')
+    .filter((employee) => employee.user.role === 'MANAGER')
+    .sort((a, b) =>
+      `${a.user.firstName} ${a.user.lastName}`.localeCompare(`${b.user.firstName} ${b.user.lastName}`),
+    );
+  const clientOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: string[] = [];
+
+    for (const client of [...(siteOptions.clientOptions ?? []), site.clientName]) {
+      const value = String(client ?? '').trim();
+      if (!value) continue;
+
+      const key = value.toLocaleLowerCase('fr-FR');
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      options.push(value);
+    }
+
+    return options;
+  }, [site.clientName, siteOptions.clientOptions]);
+
+  async function handleSubmit() {
+    if (!form.code || !form.name || !form.clientName) {
+      setError('Code, nom et client sont obligatoires.');
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = {
+        projectId: form.projectId || undefined,
+        code: form.code,
+        name: form.name,
+        clientName: form.clientName,
+        address: form.address || undefined,
+        city: form.city || undefined,
+        country: form.country || undefined,
+        managerId: form.managerId || undefined,
+        startDate: form.startDate || undefined,
+        plannedEndDate: form.plannedEndDate || undefined,
+        status: form.status,
+        progressPercent: Number(form.progressPercent),
+        gpsRadiusMeters: Number(form.gpsRadiusMeters),
+      };
+      if (form.latitude) payload.latitude = Number(form.latitude);
+      if (form.longitude) payload.longitude = Number(form.longitude);
+
+      await api.updateSite(site.id, payload);
+      setOpen(false);
+      onUpdated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Modification impossible.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <SecondaryButton type="button">
+          <Pencil className="h-4 w-4" />
+          Modifier
+        </SecondaryButton>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(720px,calc(100vw-32px))] max-h-[90vh] overflow-auto -translate-x-1/2 -translate-y-1/2 rounded-xl border border-borderSoft bg-surface shadow-dropdown">
+          <div className="flex items-center justify-between border-b border-borderSoft px-5 py-4">
+            <Dialog.Title className="text-base font-semibold text-bodyText">Modifier le chantier</Dialog.Title>
+            <Dialog.Close className="flex h-7 w-7 items-center justify-center rounded-md text-mutedText hover:bg-surfaceHover">
+              <X className="h-4 w-4" />
+            </Dialog.Close>
+          </div>
+
+          <div className="grid gap-4 p-5">
+            <div className="grid gap-3 md:grid-cols-2">
+              <SelectField label="Projet" value={form.projectId} onChange={(e) => setForm((p) => ({ ...p, projectId: e.target.value }))}>
+                <option value="">Sans projet</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.code} - {project.name}
+                  </option>
+                ))}
+              </SelectField>
+              <FormField label="Code chantier" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
+              <FormField label="Nom du chantier" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+              <SelectField label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
+                <option value="">Selectionner</option>
+                {clientOptions.map((client) => (
+                  <option key={client} value={client}>
+                    {client}
+                  </option>
+                ))}
+              </SelectField>
+              <SelectField label="Chef de site" value={form.managerId} onChange={(e) => setForm((p) => ({ ...p, managerId: e.target.value }))}>
+                <option value="">Selectionner</option>
+                {managerOptions.map((employee) => (
+                  <option key={employee.user.id} value={employee.user.id}>
+                    {employee.user.firstName} {employee.user.lastName}
+                  </option>
+                ))}
+              </SelectField>
+              <SelectField label="Statut" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
+                <option value="ACTIVE">Actif</option>
+                <option value="SUSPENDED">Suspendu</option>
+                <option value="COMPLETED">Termine</option>
+              </SelectField>
+              <FormField label="Adresse" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
+              <FormField label="Ville" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
+              <FormField label="Pays (ISO)" value={form.country} onChange={(e) => setForm((p) => ({ ...p, country: e.target.value }))} />
+              <DateField label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
+              <DateField label="Fin prevue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
+              <FormField
+                label="Avancement (%)"
+                type="number"
+                min={0}
+                max={100}
+                value={form.progressPercent}
+                onChange={(e) => setForm((p) => ({ ...p, progressPercent: Number(e.target.value) }))}
+              />
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <FormField label="Latitude" value={form.latitude} onChange={(e) => setForm((p) => ({ ...p, latitude: e.target.value }))} />
+              <FormField label="Longitude" value={form.longitude} onChange={(e) => setForm((p) => ({ ...p, longitude: e.target.value }))} />
+              <FormField
+                label="Rayon GPS (m)"
+                type="number"
+                min={1}
+                value={form.gpsRadiusMeters}
+                onChange={(e) => setForm((p) => ({ ...p, gpsRadiusMeters: Number(e.target.value) }))}
+              />
+            </div>
+
+            {error && <p className="text-sm text-dangerText">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <SecondaryButton type="button">Annuler</SecondaryButton>
+              </Dialog.Close>
+              <PrimaryButton type="button" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? 'Enregistrement...' : 'Enregistrer'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 function AssignEmployeeModal({
   siteId,
   assignments,
   employees,
+  siteRoleOptions,
   onAssigned,
 }: {
   siteId: string;
   assignments: Assignment[];
   employees: Employee[];
+  siteRoleOptions: string[];
   onAssigned: () => void;
 }) {
+  const roleOptions = useMemo(() => {
+    const configuredOptions = siteRoleOptions.length ? siteRoleOptions : DEFAULT_SITE_ROLE_OPTIONS;
+    const seen = new Set<string>();
+    const options: string[] = [];
+
+    for (const role of configuredOptions) {
+      const value = role.trim();
+      if (!value) continue;
+
+      const key = value.toLocaleLowerCase('fr-FR');
+      if (seen.has(key)) continue;
+
+      seen.add(key);
+      options.push(value);
+    }
+
+    return options.length ? options : DEFAULT_SITE_ROLE_OPTIONS;
+  }, [siteRoleOptions]);
+  const defaultRoleOnSite = roleOptions.includes('Technicien') ? 'Technicien' : roleOptions[0] ?? '';
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     userId: '',
     startDate: todayDate(),
     endDate: '',
-    roleOnSite: 'Technicien',
+    roleOnSite: defaultRoleOnSite,
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setForm((previous) =>
+      previous.roleOnSite && roleOptions.includes(previous.roleOnSite)
+        ? previous
+        : { ...previous, roleOnSite: defaultRoleOnSite },
+    );
+  }, [defaultRoleOnSite, roleOptions]);
 
   const activeAssignedUserIds = useMemo(
     () =>
@@ -136,7 +401,7 @@ function AssignEmployeeModal({
     );
 
   function reset() {
-    setForm({ userId: '', startDate: todayDate(), endDate: '', roleOnSite: 'Technicien' });
+    setForm({ userId: '', startDate: todayDate(), endDate: '', roleOnSite: defaultRoleOnSite });
     setError(null);
     setSubmitting(false);
   }
@@ -225,12 +490,17 @@ function AssignEmployeeModal({
               />
             </div>
 
-            <FormField
-              label="Role sur chantier"
+            <SelectField
+              label="Role sur site"
               value={form.roleOnSite}
-              placeholder="Technicien, chef d'equipe..."
               onChange={(event) => setForm((previous) => ({ ...previous, roleOnSite: event.target.value }))}
-            />
+            >
+              {roleOptions.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </SelectField>
 
             {availableEmployees.length === 0 && (
               <p className="text-sm text-mutedText">Tous les employes actifs disponibles sont deja affectes a ce chantier.</p>
@@ -254,7 +524,9 @@ function AssignEmployeeModal({
 
 export default function SiteDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const fallback = (demoSites.find((s) => s.id === params.id) as Site | undefined) ?? fallbackSite;
+  const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: site, refresh } = useApiData<Site>(
     () => api.site(params.id) as Promise<Site>,
@@ -262,12 +534,21 @@ export default function SiteDetailPage() {
   );
   const myRole = tokenStore.session?.role ?? '';
   const currentUserId = tokenStore.session?.user.id;
+  const canEditSite = myRole === 'RESOURCE_MANAGER';
   const canManageAssignments = ['RESOURCE_MANAGER', 'HR', 'MANAGER'].includes(myRole);
   const canAssign =
     ['RESOURCE_MANAGER', 'HR'].includes(myRole) || (myRole === 'MANAGER' && site.manager?.id === currentUserId);
   const { data: employees } = useApiData<Employee[]>(
     () => (canManageAssignments ? (api.employees() as Promise<Employee[]>) : Promise.resolve([])),
     [],
+  );
+  const { data: projects } = useApiData<Project[]>(
+    () => (canEditSite ? (api.projects() as Promise<Project[]>) : Promise.resolve([])),
+    [],
+  );
+  const { data: siteOptions } = useApiData<SiteOptions>(
+    () => api.settingsSiteOptions() as Promise<SiteOptions>,
+    { siteRoleOptions: DEFAULT_SITE_ROLE_OPTIONS, clientOptions: [] },
   );
 
   const assignmentColumns: ColumnDef<Assignment, unknown>[] = [
@@ -290,7 +571,7 @@ export default function SiteDetailPage() {
       cell: ({ row }) => ROLE_LABELS[row.original.user.role] ?? row.original.user.role,
     },
     {
-      header: 'Rôle sur chantier',
+      header: 'Rôle sur site',
       cell: ({ row }) => row.original.roleOnSite ?? '—',
     },
     {
@@ -351,6 +632,16 @@ export default function SiteDetailPage() {
   const gpsAnomalies = site.attendancePunches.filter((p) => p.isGpsAnomaly).length;
   const activeAssignments = site.assignments.filter((a) => !a.endDate || new Date(a.endDate) >= new Date()).length;
 
+  async function handleDeleteSite() {
+    setActionError(null);
+    try {
+      await api.deleteSite(site.id);
+      router.push('/sites');
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'Suppression impossible.');
+    }
+  }
+
   return (
     <AppShell>
       <div className="grid gap-6">
@@ -366,17 +657,51 @@ export default function SiteDetailPage() {
             title={site.name}
             description={`${site.code} · ${site.clientName}`}
             actions={
-              canAssign ? (
-                <AssignEmployeeModal
-                  siteId={site.id}
-                  assignments={site.assignments}
-                  employees={employees}
-                  onAssigned={refresh}
-                />
+              canEditSite || canAssign ? (
+                <div className="flex flex-wrap gap-2">
+                  {canEditSite && (
+                    <EditSiteModal
+                      site={site}
+                      projects={projects}
+                      employees={employees}
+                      siteOptions={siteOptions}
+                      onUpdated={refresh}
+                    />
+                  )}
+                  {canEditSite && (
+                    <ConfirmDialog
+                      title="Supprimer le chantier"
+                      description={`Supprimer le chantier ${site.name} ? Il sera suspendu et masque des listes actives.`}
+                      confirmLabel="Supprimer"
+                      onConfirm={() => void handleDeleteSite()}
+                      trigger={
+                        <DangerButton type="button">
+                          <Trash2 className="h-4 w-4" />
+                          Supprimer
+                        </DangerButton>
+                      }
+                    />
+                  )}
+                  {canAssign && (
+                    <AssignEmployeeModal
+                      siteId={site.id}
+                      assignments={site.assignments}
+                      employees={employees}
+                      siteRoleOptions={siteOptions.siteRoleOptions}
+                      onAssigned={refresh}
+                    />
+                  )}
+                </div>
               ) : undefined
             }
           />
         </div>
+
+        {actionError && (
+          <div className="rounded-lg border border-dangerBorder bg-dangerBg px-4 py-3 text-sm text-dangerText">
+            {actionError}
+          </div>
+        )}
 
         <SummaryCounters
           items={[

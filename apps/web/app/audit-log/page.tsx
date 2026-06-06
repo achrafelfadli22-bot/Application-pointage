@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ColumnDef } from '@tanstack/react-table';
 import { Shield } from 'lucide-react';
 import { AppShell }    from '@/components/layout/app-shell';
@@ -20,6 +20,11 @@ type AuditLog = {
   metadata: Record<string, unknown> | null;
   createdAt: string;
   user: { id: string; firstName: string; lastName: string; email: string } | null;
+};
+
+type AuditLogPageResponse = {
+  data: AuditLog[];
+  nextCursor: string | null;
 };
 
 // ─── Action labels ────────────────────────────────────────────────────────────
@@ -56,11 +61,32 @@ export default function AuditLogPage() {
   const [search, setSearch]       = useState('');
   const [actionFilter, setAction] = useState('');
   const [entityFilter, setEntity] = useState('');
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  const { data: logs, loading } = useApiData<AuditLog[]>(
-    () => api.auditLogs(200) as Promise<AuditLog[]>,
-    [],
+  const { data: firstPage, loading } = useApiData<AuditLogPageResponse>(
+    () => api.auditLogs({ take: 100 }) as Promise<AuditLogPageResponse>,
+    { data: [], nextCursor: null },
   );
+
+  useEffect(() => {
+    setLogs(firstPage.data);
+    setNextCursor(firstPage.nextCursor);
+  }, [firstPage]);
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return;
+
+    setLoadingMore(true);
+    try {
+      const page = (await api.auditLogs({ take: 100, cursor: nextCursor })) as AuditLogPageResponse;
+      setLogs((previous) => [...previous, ...page.data]);
+      setNextCursor(page.nextCursor);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const allActions  = useMemo(() => [...new Set(logs.map((l) => l.action))].sort(), [logs]);
   const allEntities = useMemo(() => [...new Set(logs.map((l) => l.entityType))].sort(), [logs]);
@@ -200,7 +226,19 @@ export default function AuditLogPage() {
             Aucun événement correspondant aux filtres.
           </div>
         ) : (
-          <DataTable columns={columns} data={filtered} pageSize={25} />
+          <div className="grid gap-3">
+            <DataTable columns={columns} data={filtered} pageSize={25} />
+            {nextCursor && (
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="justify-self-center rounded-md border border-borderSoft bg-surface px-4 py-2 text-sm font-semibold text-bodyText hover:bg-surfaceHover disabled:opacity-60"
+              >
+                {loadingMore ? 'Chargement...' : 'Charger plus'}
+              </button>
+            )}
+          </div>
         )}
       </div>
     </AppShell>

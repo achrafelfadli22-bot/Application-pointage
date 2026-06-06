@@ -39,11 +39,11 @@ export class ProjectsService {
 
   findOne(user: CurrentUserContext, id: string) {
     return this.prisma.project.findFirstOrThrow({
-      where: { id, ...this.scope(user), deletedAt: null },
+      where: { id, ...this.scope(user, true), deletedAt: null },
       include: {
         projectManager: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
         sites: {
-          where: { deletedAt: null },
+          where: this.siteScope(user),
           include: {
             manager: { select: { id: true, firstName: true, lastName: true, email: true } },
             _count: { select: { assignments: true, attendancePunches: true } },
@@ -166,12 +166,17 @@ export class ProjectsService {
       sites: {
         some: {
           deletedAt: null,
-          assignments: {
-            some: {
-              userId: user.userId,
-              ...this.hierarchy.activeAssignmentWhere(),
+          OR: [
+            {
+              assignments: {
+                some: {
+                  userId: user.userId,
+                  ...this.hierarchy.activeAssignmentWhere(),
+                },
+              },
             },
-          },
+            { employeeProfiles: { some: { userId: user.userId } } },
+          ],
         },
       },
     };
@@ -194,5 +199,43 @@ export class ProjectsService {
     }
 
     return { tenantId };
+  }
+
+  private siteScope(user: CurrentUserContext): Prisma.SiteWhereInput {
+    const base: Prisma.SiteWhereInput = { deletedAt: null };
+
+    if (user.role === UserRole.SUPER_ADMIN || user.role === UserRole.RESOURCE_MANAGER || user.role === UserRole.HR) {
+      return base;
+    }
+
+    const ownSiteLink: Prisma.SiteWhereInput = {
+      OR: [
+        {
+          assignments: {
+            some: {
+              userId: user.userId,
+              ...this.hierarchy.activeAssignmentWhere(),
+            },
+          },
+        },
+        { employeeProfiles: { some: { userId: user.userId } } },
+      ],
+    };
+
+    if (user.role === UserRole.PROJECT_MANAGER) {
+      return {
+        ...base,
+        OR: [{ project: { projectManagerId: user.userId } }, ownSiteLink],
+      };
+    }
+
+    if (user.role === UserRole.MANAGER) {
+      return {
+        ...base,
+        OR: [{ managerId: user.userId }, ownSiteLink],
+      };
+    }
+
+    return { ...base, ...ownSiteLink };
   }
 }

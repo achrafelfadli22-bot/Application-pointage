@@ -4,13 +4,16 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { ColumnDef } from '@tanstack/react-table';
-import { ArrowLeft, Mail, Phone } from 'lucide-react';
+import * as Dialog from '@radix-ui/react-dialog';
+import { ArrowLeft, Mail, Pencil, Phone, X } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { AccentCard, SummaryCounters } from '@/components/ui/cards';
+import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
 import { DataTable } from '@/components/ui/data-table';
+import { DateField, FormField, SelectField } from '@/components/ui/form-fields';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { api } from '@/lib/api-client';
+import { api, tokenStore } from '@/lib/api-client';
 import { demoEmployees } from '@/lib/demo-data';
 import { ROLE_LABELS } from '@/lib/nav-items';
 import { useApiData } from '@/lib/use-api-data';
@@ -57,6 +60,8 @@ type AttendancePunch = {
   site?: { code: string; name: string } | null;
 };
 
+type Site = { id: string; code: string; name: string };
+
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -66,13 +71,199 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function dateInput(value?: string | null) {
+  return value ? value.slice(0, 10) : '';
+}
+
+function EditEmployeeModal({
+  employee,
+  sites,
+  onUpdated,
+}: {
+  employee: Employee;
+  sites: Site[];
+  onUpdated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    firstName: employee.user.firstName,
+    lastName: employee.user.lastName,
+    email: employee.user.email,
+    phone: employee.user.phone ?? '',
+    password: '',
+    role: employee.user.role,
+    employeeNumber: employee.employeeNumber,
+    jobTitle: employee.jobTitle,
+    contractType: employee.contractType,
+    hireDate: dateInput(employee.hireDate),
+    mainSiteId: employee.mainSite?.id ?? '',
+    annualLeaveBalance: employee.annualLeaveBalance ?? 0,
+    hourlyRate: employee.hourlyRate ?? '',
+    status: employee.status,
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({
+      firstName: employee.user.firstName,
+      lastName: employee.user.lastName,
+      email: employee.user.email,
+      phone: employee.user.phone ?? '',
+      password: '',
+      role: employee.user.role,
+      employeeNumber: employee.employeeNumber,
+      jobTitle: employee.jobTitle,
+      contractType: employee.contractType,
+      hireDate: dateInput(employee.hireDate),
+      mainSiteId: employee.mainSite?.id ?? '',
+      annualLeaveBalance: employee.annualLeaveBalance ?? 0,
+      hourlyRate: employee.hourlyRate ?? '',
+      status: employee.status,
+    });
+    setError(null);
+  }, [open, employee]);
+
+  function patch(key: keyof typeof form, value: string | number) {
+    setForm((previous) => ({ ...previous, [key]: value }));
+  }
+
+  async function handleSubmit() {
+    if (!form.firstName || !form.lastName || !form.email || !form.employeeNumber || !form.jobTitle || !form.hireDate) {
+      setError("Prenom, nom, email, matricule, poste et date d'embauche sont obligatoires.");
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = {
+        firstName: form.firstName,
+        lastName: form.lastName,
+        email: form.email,
+        phone: form.phone || null,
+        role: form.role,
+        employeeNumber: form.employeeNumber,
+        jobTitle: form.jobTitle,
+        contractType: form.contractType,
+        hireDate: form.hireDate,
+        mainSiteId: form.mainSiteId || null,
+        annualLeaveBalance: Number(form.annualLeaveBalance),
+        hourlyRate: form.hourlyRate === '' ? null : Number(form.hourlyRate),
+        status: form.status,
+      };
+      if (form.password) payload.password = form.password;
+
+      await api.updateEmployee(employee.id, payload);
+      setOpen(false);
+      onUpdated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Modification impossible.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <SecondaryButton type="button">
+          <Pencil className="h-4 w-4" />
+          Modifier
+        </SecondaryButton>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(760px,calc(100vw-32px))] max-h-[90vh] overflow-auto -translate-x-1/2 -translate-y-1/2 rounded-xl border border-borderSoft bg-surface shadow-dropdown">
+          <div className="flex items-center justify-between border-b border-borderSoft px-5 py-4">
+            <Dialog.Title className="text-base font-semibold text-bodyText">Modifier les donnees employe</Dialog.Title>
+            <Dialog.Close className="flex h-7 w-7 items-center justify-center rounded-md text-mutedText hover:bg-surfaceHover">
+              <X className="h-4 w-4" />
+            </Dialog.Close>
+          </div>
+
+          <div className="grid gap-4 p-5">
+            <div className="grid gap-3 md:grid-cols-2">
+              <FormField label="Prenom" value={form.firstName} onChange={(event) => patch('firstName', event.target.value)} />
+              <FormField label="Nom" value={form.lastName} onChange={(event) => patch('lastName', event.target.value)} />
+              <FormField label="Email" type="email" value={form.email} onChange={(event) => patch('email', event.target.value)} />
+              <FormField label="Telephone" value={form.phone} onChange={(event) => patch('phone', event.target.value)} />
+              <FormField label="Nouveau mot de passe" type="password" value={form.password} onChange={(event) => patch('password', event.target.value)} />
+              <SelectField label="Role" value={form.role} onChange={(event) => patch('role', event.target.value)}>
+                <option value="EMPLOYEE">Employe</option>
+                <option value="MANAGER">Chef de site</option>
+                <option value="PROJECT_MANAGER">Chef de projet</option>
+                <option value="HR">RH</option>
+                <option value="RESOURCE_MANAGER">Ressource Manager</option>
+              </SelectField>
+              <FormField label="Matricule" value={form.employeeNumber} onChange={(event) => patch('employeeNumber', event.target.value)} />
+              <FormField label="Poste" value={form.jobTitle} onChange={(event) => patch('jobTitle', event.target.value)} />
+              <SelectField label="Type de contrat" value={form.contractType} onChange={(event) => patch('contractType', event.target.value)}>
+                <option value="CDI">CDI</option>
+                <option value="CDD">CDD</option>
+                <option value="INTERIM">Interim</option>
+                <option value="FREELANCE">Freelance</option>
+              </SelectField>
+              <DateField label="Date d'embauche" value={form.hireDate} onChange={(event) => patch('hireDate', event.target.value)} />
+              <SelectField label="Chantier principal" value={form.mainSiteId} onChange={(event) => patch('mainSiteId', event.target.value)}>
+                <option value="">Aucun</option>
+                {sites.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.code} - {site.name}
+                  </option>
+                ))}
+              </SelectField>
+              <SelectField label="Statut employe" value={form.status} onChange={(event) => patch('status', event.target.value)}>
+                <option value="ACTIVE">Actif</option>
+                <option value="INACTIVE">Inactif</option>
+                <option value="SUSPENDED">Suspendu</option>
+              </SelectField>
+              <FormField
+                label="Solde conges annuel (jours)"
+                type="number"
+                min={0}
+                value={form.annualLeaveBalance}
+                onChange={(event) => patch('annualLeaveBalance', Number(event.target.value))}
+              />
+              <FormField
+                label="Taux horaire (MAD)"
+                type="number"
+                min={0}
+                value={form.hourlyRate}
+                onChange={(event) => patch('hourlyRate', event.target.value === '' ? '' : Number(event.target.value))}
+              />
+            </div>
+
+            {error && <p className="text-sm text-dangerText">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Dialog.Close asChild>
+                <SecondaryButton type="button">Annuler</SecondaryButton>
+              </Dialog.Close>
+              <PrimaryButton type="button" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? 'Enregistrement...' : 'Enregistrer'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 export default function EmployeeDetailPage() {
   const params = useParams<{ id: string }>();
   const fallback = (demoEmployees.find((e) => e.id === params.id) ?? demoEmployees[0]) as Employee;
+  const myRole = tokenStore.session?.role ?? '';
+  const canEdit = myRole === 'RESOURCE_MANAGER';
 
-  const { data: employee } = useApiData<Employee>(
+  const { data: employee, refresh } = useApiData<Employee>(
     () => api.employee(params.id) as Promise<Employee>,
     fallback,
+  );
+  const { data: sites } = useApiData<Site[]>(
+    () => (canEdit ? (api.sites() as Promise<Site[]>) : Promise.resolve([])),
+    [],
   );
 
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
@@ -154,6 +345,7 @@ export default function EmployeeDetailPage() {
           <PageHeader
             title={`${employee.user.firstName} ${employee.user.lastName}`}
             description={`${employee.jobTitle} · ${employee.employeeNumber}`}
+            actions={canEdit ? <EditEmployeeModal employee={employee} sites={sites} onUpdated={refresh} /> : undefined}
           />
         </div>
 

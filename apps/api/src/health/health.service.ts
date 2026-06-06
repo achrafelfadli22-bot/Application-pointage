@@ -74,7 +74,7 @@ export class HealthService {
 
   private async minio() {
     try {
-      await this.storage.client.listBuckets();
+      await this.storage.check();
       return { status: 'up' as DependencyStatus };
     } catch (error) {
       return this.down(error);

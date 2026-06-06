@@ -138,16 +138,14 @@ export class LeaveService {
     );
 
     const readable = Readable.from(file.buffer);
-    await this.storage.client.putObject(
-      this.storage.bucket,
+    await this.storage.putObject(
       key,
       readable,
       file.size,
       { 'Content-Type': file.mimetype },
     );
 
-    const url = await this.storage.client.presignedGetObject(
-      this.storage.bucket,
+    const url = await this.storage.presignedGetObject(
       key,
       7 * 24 * 3600, // 7 days
     );

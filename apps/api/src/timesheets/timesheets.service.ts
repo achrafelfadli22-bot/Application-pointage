@@ -245,6 +245,10 @@ export class TimesheetsService {
       return requestedStatus;
     }
 
+    if (user.role === UserRole.RESOURCE_MANAGER) {
+      throw new ForbiddenException('Le Ressource Manager ne valide pas les timesheets.');
+    }
+
     const level = await this.hierarchy.approvalLevelFor(
       user,
       timesheet.tenantId,
@@ -253,7 +257,7 @@ export class TimesheetsService {
     );
 
     if (!level) {
-      throw new ForbiddenException('Only N+1, N+2, HR, or resource manager can validate this timesheet');
+      throw new ForbiddenException('Only N+1, N+2, or HR can validate this timesheet');
     }
 
     if (requestedStatus === TimesheetStatus.REJECTED) {

@@ -7,7 +7,6 @@ import { cn } from '@/lib/utils';
 const tabs = [
   { label: 'Timesheet', href: '/timesheets' },
   { label: 'Time Off', href: '/time-off' },
-  { label: 'Unscheduled Hours Requests', href: '/attendance' },
   { label: 'Pointage', href: '/attendance' },
   { label: 'Reports', href: '/reports' },
 ];

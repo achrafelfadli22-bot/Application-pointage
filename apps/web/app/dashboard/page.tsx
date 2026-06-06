@@ -67,7 +67,7 @@ const fallbackAdmin: DashboardData = {
       id: 'p1', punchDate: '2026-05-23T00:00:00.000Z',
       checkInAt: '2026-05-23T08:00:00.000Z', status: 'SUBMITTED',
       user: { firstName: 'Omar', lastName: 'Mansouri' },
-      site: { name: 'Résidence Palmier' },
+      site: { name: 'MPH' },
     },
   ],
   pendingLeaveRequests: demoLeaveRequests,
@@ -79,19 +79,19 @@ const fallbackPunches: Punch[] = [
     id: 'p1', punchDate: '2026-05-23T00:00:00.000Z',
     checkInAt: '2026-05-23T08:00:00.000Z', checkOutAt: '2026-05-23T17:00:00.000Z',
     durationMinutes: 540, status: 'APPROVED',
-    site: { name: 'Résidence Palmier' },
+    site: { name: 'MPH' },
   },
   {
     id: 'p2', punchDate: '2026-05-22T00:00:00.000Z',
     checkInAt: '2026-05-22T08:05:00.000Z', checkOutAt: '2026-05-22T17:10:00.000Z',
     durationMinutes: 545, status: 'APPROVED',
-    site: { name: 'Résidence Palmier' },
+    site: { name: 'SAFI' },
   },
   {
     id: 'p3', punchDate: '2026-05-21T00:00:00.000Z',
     checkInAt: '2026-05-21T07:55:00.000Z', checkOutAt: null,
     durationMinutes: null, status: 'SUBMITTED',
-    site: { name: 'Résidence Palmier' },
+    site: { name: 'MPH' },
   },
 ];
 

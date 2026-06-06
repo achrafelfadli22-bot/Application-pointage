@@ -36,11 +36,11 @@ export class ExportsProcessor extends WorkerHost {
     const buf = Buffer.from(csv, 'utf-8');
     const readable = Readable.from(buf);
 
-    await this.storage.client.putObject(this.storage.bucket, key, readable, buf.length, {
+    await this.storage.putObject(key, readable, buf.length, {
       'Content-Type': 'text/csv',
     });
 
-    const url = await this.storage.client.presignedGetObject(this.storage.bucket, key, 3600);
+    const url = await this.storage.presignedGetObject(key, 3600);
     this.logger.log(`[exports] Job ${job.id} done — key=${key}`);
     return { key, url };
   }

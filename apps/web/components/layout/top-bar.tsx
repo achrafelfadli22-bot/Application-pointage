@@ -10,6 +10,7 @@ const breadcrumbs: Record<string, string[]> = {
   '/dashboard':            ['Tableau de bord'],
   '/timesheets':           ['Timesheets'],
   '/team':                 ['Mon équipe'],
+  '/projects':             ['Projets'],
   '/sites':                ['Chantiers'],
   '/attendance':           ['Pointage'],
   '/time-off':             ['Congés'],
@@ -44,6 +45,12 @@ type EmployeeCrumb = {
 type SiteCrumb = {
   code?: string | null;
   name?: string | null;
+};
+
+type ProjectCrumb = {
+  code?: string | null;
+  name?: string | null;
+  clientName?: string | null;
 };
 
 function personName(person?: PersonCrumb | null) {
@@ -82,6 +89,11 @@ function siteBreadcrumb(site: SiteCrumb) {
   return site.name || site.code || 'Detail chantier';
 }
 
+function projectBreadcrumb(project: ProjectCrumb) {
+  const label = project.code && project.name ? `${project.code} - ${project.name}` : project.name || project.code;
+  return project.clientName && label ? `${label} - ${project.clientName}` : label || 'Detail projet';
+}
+
 function getBreadcrumbs(pathname: string, detailLabel?: string | null): string[] {
   if (breadcrumbs[pathname]) return breadcrumbs[pathname]!;
 
@@ -94,6 +106,9 @@ function getBreadcrumbs(pathname: string, detailLabel?: string | null): string[]
   }
   if (parts.length === 2 && parts[0] === 'sites') {
     return ['Chantiers', detailLabel || 'Detail chantier'];
+  }
+  if (parts.length === 2 && parts[0] === 'projects') {
+    return ['Projets', detailLabel || 'Detail projet'];
   }
 
   return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1));
@@ -150,7 +165,7 @@ export function TopBar({ onMenuOpen }: { onMenuOpen?: () => void }) {
 
     const [rawSection, rawId] = parts;
     const section =
-      rawSection === 'timesheets' || rawSection === 'team' || rawSection === 'sites'
+      rawSection === 'timesheets' || rawSection === 'team' || rawSection === 'sites' || rawSection === 'projects'
         ? rawSection
         : null;
     if (!rawId || !section) {
@@ -169,6 +184,8 @@ export function TopBar({ onMenuOpen }: { onMenuOpen?: () => void }) {
           label = employeeBreadcrumb((await api.employee(id)) as EmployeeCrumb);
         } else if (section === 'sites') {
           label = siteBreadcrumb((await api.site(id)) as SiteCrumb);
+        } else if (section === 'projects') {
+          label = projectBreadcrumb((await api.project(id)) as ProjectCrumb);
         }
 
         if (!cancelled) {
