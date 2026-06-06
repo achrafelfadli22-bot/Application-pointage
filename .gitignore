@@ -19,3 +19,10 @@ _tmp_*
 test_write
 *.tsbuildinfo
 *.bak
+
+# Local business documents and generated presentation exports.
+/*.docx
+/*.pptx
+/*.xlsx
+/slide-*.jpg
+/synthese_visibilite_droits_roles.html
