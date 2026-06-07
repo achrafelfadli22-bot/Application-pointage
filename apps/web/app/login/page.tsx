@@ -17,6 +17,14 @@ const schema = z.object({
 
 type LoginForm = z.infer<typeof schema>;
 
+function safeNextPath(value: string | null) {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) {
+    return null;
+  }
+
+  return value;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +47,8 @@ export default function LoginPage() {
         router.push('/tenant-suspended');
         return;
       }
-      router.push(session.role === 'SUPER_ADMIN' ? '/admin/tenants' : '/dashboard');
+      const nextPath = safeNextPath(new URLSearchParams(window.location.search).get('next'));
+      router.push(nextPath ?? (session.role === 'SUPER_ADMIN' ? '/admin/tenants' : '/dashboard'));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Identifiants incorrects.');
     }

@@ -132,13 +132,20 @@ export class TimesheetsService {
   ) {
     const timesheet = await this.prisma.timesheet.findFirstOrThrow({
       where: { id, ...(await this.scope(user)) },
-      include: { user: true, lines: { select: { siteId: true } } },
+      include: { user: true, lines: { select: { siteId: true, entries: { select: { hours: true } } } } },
     });
 
     if (nextStatus === TimesheetStatus.SUBMITTED && timesheet.userId !== user.userId) {
-      throw new ForbiddenException('Only owner can submit the timesheet');
+      const managedUserIds = await this.hierarchy.managedUserIds(user);
+      if (managedUserIds && !managedUserIds.includes(timesheet.userId)) {
+        throw new ForbiddenException('Vous pouvez soumettre uniquement les timesheets de votre perimetre.');
+      }
     }
     this.assertTransition(timesheet.status, nextStatus);
+
+    if (nextStatus === TimesheetStatus.SUBMITTED || nextStatus === TimesheetStatus.APPROVED) {
+      this.assertHasWorkEntries(timesheet);
+    }
 
     const effectiveStatus = await this.resolveApprovalStatus(user, timesheet, nextStatus);
     const effectiveAction = effectiveStatus === TimesheetStatus.N1_APPROVED ? 'timesheet.n1_approved' : action;
@@ -281,6 +288,21 @@ export class TimesheetsService {
     }
 
     throw new BadRequestException('This timesheet is not waiting for your approval level');
+  }
+
+  private assertHasWorkEntries(timesheet: { lines: Array<{ entries?: Array<{ hours: unknown }> }> }) {
+    if (!timesheet.lines.length) {
+      throw new BadRequestException('La timesheet ne contient aucune ligne. Ajoutez au moins une ligne avant soumission ou validation.');
+    }
+
+    const totalHours = timesheet.lines.reduce(
+      (lineSum, line) => lineSum + (line.entries ?? []).reduce((entrySum, entry) => entrySum + Number(entry.hours ?? 0), 0),
+      0,
+    );
+
+    if (totalHours <= 0) {
+      throw new BadRequestException('La timesheet ne contient aucune heure saisie. Ajoutez des heures avant soumission ou validation.');
+    }
   }
 
   private assertTransition(currentStatus: TimesheetStatus, nextStatus: TimesheetStatus) {

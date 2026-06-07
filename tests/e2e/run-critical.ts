@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
 const API_URL = process.env.API_URL ?? 'http://127.0.0.1:4000/api';
-const WEB_URL = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
+const WEB_URL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000';
 const apiPort = new URL(API_URL).port || '4000';
 const rootDir = process.cwd();
 const pnpmBin = join(rootDir, 'node_modules', '.bin', process.platform === 'win32' ? 'pnpm.CMD' : 'pnpm');
@@ -122,7 +122,16 @@ async function main() {
         ...process.env,
         NEXT_PUBLIC_API_URL: API_URL,
       });
-      await waitFor('web app', WEB_URL, webProcess);
+      try {
+        await waitFor('web app', WEB_URL, webProcess);
+      } catch (error) {
+        if (!(await urlAvailable(WEB_URL))) {
+          throw error;
+        }
+
+        stopProcess(webProcess);
+        webProcess = null;
+      }
     }
 
     runChecked(playwrightBin, ['test'], {

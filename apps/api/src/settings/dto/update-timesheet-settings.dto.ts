@@ -1,9 +1,14 @@
-import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum, IsOptional } from 'class-validator';
+
+export enum TimesheetPeriodType {
+  WEEKLY = 'WEEKLY',
+  MONTHLY = 'MONTHLY',
+}
 
 export class UpdateTimesheetSettingsDto {
+  @ApiPropertyOptional({ enum: TimesheetPeriodType, description: 'WEEKLY = 7 jours, MONTHLY = 30 jours' })
   @IsOptional()
-  @IsInt()
-  @Min(1)
-  @Max(31)
-  timesheetPeriodDays?: number;
+  @IsEnum(TimesheetPeriodType)
+  timesheetPeriod?: TimesheetPeriodType;
 }

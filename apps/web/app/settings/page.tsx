@@ -586,7 +586,8 @@ function LeaveTypesTab() {
 // ─── Attendance Settings tab ──────────────────────────────────────────────────
 
 type TimesheetTaskTypeForm = TimesheetTaskType;
-type TimesheetSettings = { timesheetPeriodDays: number };
+type TimesheetPeriodType = 'WEEKLY' | 'MONTHLY';
+type TimesheetSettings = { timesheetPeriod: TimesheetPeriodType; timesheetPeriodDays: number };
 type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[] };
 
 const emptyTimesheetTaskType: TimesheetTaskTypeForm = {
@@ -613,7 +614,7 @@ function TimesheetTaskTypesTab() {
   const [showForm, setShowForm] = useState(false);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [form, setForm] = useState<TimesheetTaskTypeForm>(emptyTimesheetTaskType);
-  const [periodDays, setPeriodDays] = useState(7);
+  const [timesheetPeriod, setTimesheetPeriod] = useState<TimesheetPeriodType>('WEEKLY');
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -623,7 +624,7 @@ function TimesheetTaskTypesTab() {
       .then(([taskTypesData, settingsData]) => {
         const settings = settingsData as TimesheetSettings;
         setTypes(taskTypesData as TimesheetTaskType[]);
-        setPeriodDays(Math.max(1, Math.min(31, settings.timesheetPeriodDays || 7)));
+        setTimesheetPeriod(settings.timesheetPeriod ?? 'WEEKLY');
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -695,13 +696,12 @@ function TimesheetTaskTypesTab() {
     setSuccess(false);
     setError(null);
     try {
-      const safePeriodDays = Math.max(1, Math.min(31, Number(periodDays) || 7));
       const [updated, updatedSettings] = await Promise.all([
         api.updateSettingsTimesheetTaskTypes({ types }),
-        api.updateSettingsTimesheet({ timesheetPeriodDays: safePeriodDays }),
+        api.updateSettingsTimesheet({ timesheetPeriod: timesheetPeriod }),
       ]);
       setTypes(updated as TimesheetTaskType[]);
-      setPeriodDays((updatedSettings as TimesheetSettings).timesheetPeriodDays);
+      setTimesheetPeriod((updatedSettings as TimesheetSettings).timesheetPeriod ?? 'WEEKLY');
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (e) {
@@ -738,18 +738,40 @@ function TimesheetTaskTypesTab() {
       )}
 
       <div className="border border-borderSoft bg-surfaceHover p-4">
-        <label className="grid max-w-xs gap-1">
-          <span className="text-sm font-semibold text-bodyText">Nombre de jours par timesheet</span>
-          <input
-            type="number"
-            min={1}
-            max={31}
-            value={periodDays}
-            disabled={!canEdit}
-            onChange={(e) => setPeriodDays(Math.max(1, Math.min(31, Number(e.target.value) || 1)))}
-            className="h-10 rounded-md border border-borderSoft bg-white px-3 text-sm outline-none focus:border-accent disabled:bg-grayCard disabled:text-mutedText"
-          />
-        </label>
+        <p className="mb-3 text-sm font-semibold text-bodyText">Périodicité des timesheets</p>
+        <div className="flex gap-4">
+          {(
+            [
+              { value: 'WEEKLY',  label: 'Hebdomadaire', desc: '7 jours par timesheet' },
+              { value: 'MONTHLY', label: 'Mensuelle',    desc: '30 jours par timesheet' },
+            ] as { value: TimesheetPeriodType; label: string; desc: string }[]
+          ).map((option) => (
+            <label
+              key={option.value}
+              className={`flex cursor-pointer items-start gap-3 rounded-lg border-2 px-4 py-3 transition-colors ${
+                !canEdit ? 'cursor-default opacity-60' : ''
+              } ${
+                timesheetPeriod === option.value
+                  ? 'border-accent bg-accentLight'
+                  : 'border-borderSoft bg-surface hover:border-accent/40'
+              }`}
+            >
+              <input
+                type="radio"
+                name="timesheetPeriod"
+                value={option.value}
+                checked={timesheetPeriod === option.value}
+                disabled={!canEdit}
+                onChange={() => setTimesheetPeriod(option.value)}
+                className="mt-0.5 accent-accent"
+              />
+              <div>
+                <p className="text-sm font-semibold text-bodyText">{option.label}</p>
+                <p className="text-xs text-mutedText">{option.desc}</p>
+              </div>
+            </label>
+          ))}
+        </div>
       </div>
 
       {showForm && (

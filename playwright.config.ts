@@ -14,7 +14,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [['list']],
   use: {
-    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:3000',
+    baseURL: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -23,7 +23,7 @@ export default defineConfig({
     ? undefined
     : {
         command: `${pnpm} dev`,
-        url: process.env.E2E_BASE_URL ?? 'http://localhost:3000',
+        url: process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000',
         reuseExistingServer: true,
         timeout: 120_000,
       },

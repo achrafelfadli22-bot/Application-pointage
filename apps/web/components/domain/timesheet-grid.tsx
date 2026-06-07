@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Plus, Save, Send, ThumbsUp, Undo2, X } from 'lucide-react';
 import { api, tokenStore } from '@/lib/api-client';
@@ -56,7 +56,9 @@ type Timesheet = {
 
 type EditRow = {
   projectId: string;
+  projectLabel: string;
   siteId: string;
+  siteLabel: string;
   taskName: string;
   billingType: string;
   activity: string;
@@ -92,9 +94,29 @@ function emptyHours(days: Date[]) {
   return Object.fromEntries(days.map((day) => [dateKey(day), 0]));
 }
 
+function createEmptyRow(days: Date[], defaultTaskType: string): EditRow {
+  return {
+    projectId: '',
+    projectLabel: '',
+    siteId: '',
+    siteLabel: '',
+    taskName: '',
+    billingType: 'BILLABLE',
+    activity: defaultTaskType,
+    workLocation: 'SITE',
+    placeOfWork: '',
+    hoursMap: emptyHours(days),
+  };
+}
+
+function entityLabel(entity?: { code?: string | null; name?: string | null } | null) {
+  if (!entity) return '';
+  return [entity.code, entity.name].filter(Boolean).join(' - ');
+}
+
 export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; onRefresh?: () => void }) {
   const router = useRouter();
-  const days = getDays(timesheet.periodStart, timesheet.periodEnd);
+  const days = useMemo(() => getDays(timesheet.periodStart, timesheet.periodEnd), [timesheet.periodStart, timesheet.periodEnd]);
   const { data: projects } = useApiData<ProjectOption[]>(() => api.projects() as Promise<ProjectOption[]>, []);
   const { data: sites } = useApiData<SiteOption[]>(() => api.sites() as Promise<SiteOption[]>, []);
   const { data: taskTypes } = useApiData<TimesheetTaskType[]>(
@@ -108,35 +130,50 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
   const myRole = tokenStore.session?.role ?? '';
   const myUserId = tokenStore.session?.user?.id ?? '';
   const isOwner = timesheet.user.id === myUserId;
+  const isEditor = ['RESOURCE_MANAGER', 'HR', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
   const isApprover = ['HR', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
-  const isReopener = ['HR'].includes(myRole);
+  const isReopener = ['RESOURCE_MANAGER', 'HR'].includes(myRole);
 
   const isDraftOrReopened = ['DRAFT', 'REOPENED'].includes(timesheet.status);
   const isWaitingApproval = ['SUBMITTED', 'N1_APPROVED'].includes(timesheet.status);
   const isApprovedOrRejected = ['APPROVED', 'REJECTED'].includes(timesheet.status);
 
-  const canEdit = isDraftOrReopened && (isOwner || isApprover);
-  const canSubmit = isDraftOrReopened && isOwner;
+  const canEdit = isDraftOrReopened && (isOwner || isEditor);
+  const canSubmit = isDraftOrReopened && (isOwner || isEditor);
   const canApprove = isWaitingApproval && isApprover;
   const canReject = isWaitingApproval && isApprover;
   const canReopen = isApprovedOrRejected && isReopener;
 
-  const buildRows = (): EditRow[] =>
-    timesheet.lines.map((line) => ({
-      projectId: line.site?.project?.id ?? '',
-      siteId: line.site?.id ?? '',
-      taskName: line.taskName,
-      billingType: line.billingType || 'BILLABLE',
-      activity: line.activity || 'EXECUTION',
-      workLocation: line.workLocation || 'SITE',
-      placeOfWork: line.placeOfWork || line.site?.name || '',
-      hoursMap: Object.fromEntries(line.entries.map((entry) => [entry.entryDate.slice(0, 10), Number(entry.hours)])),
-    }));
+  const initialRows = useMemo<EditRow[]>(() => {
+    if (timesheet.lines.length === 0) {
+      return canEdit ? [createEmptyRow(days, defaultTaskType)] : [];
+    }
 
-  const [rows, setRows] = useState<EditRow[]>(buildRows);
+    return timesheet.lines.map((line) => {
+      const project = line.site?.project;
+      return {
+        projectId: project?.id ?? '',
+        projectLabel: entityLabel(project),
+        siteId: line.site?.id ?? '',
+        siteLabel: entityLabel(line.site),
+        taskName: line.taskName,
+        billingType: line.billingType || 'BILLABLE',
+        activity: line.activity || defaultTaskType,
+        workLocation: line.workLocation || 'SITE',
+        placeOfWork: line.placeOfWork || line.site?.name || '',
+        hoursMap: Object.fromEntries(line.entries.map((entry) => [entry.entryDate.slice(0, 10), Number(entry.hours)])),
+      };
+    });
+  }, [canEdit, days, defaultTaskType, timesheet.lines]);
+
+  const [rows, setRows] = useState<EditRow[]>(initialRows);
   const [saving, setSaving] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setRows(initialRows);
+  }, [initialRows]);
 
   function patchRow(rowIndex: number, patch: Partial<EditRow>) {
     setRows((previous) => previous.map((row, index) => (index === rowIndex ? { ...row, ...patch } : row)));
@@ -152,7 +189,14 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
   }
 
   function setProject(rowIndex: number, projectId: string) {
-    patchRow(rowIndex, { projectId, siteId: '', placeOfWork: '' });
+    const project = projects.find((item) => item.id === projectId);
+    patchRow(rowIndex, {
+      projectId,
+      projectLabel: entityLabel(project),
+      siteId: '',
+      siteLabel: '',
+      placeOfWork: '',
+    });
   }
 
   function setSite(rowIndex: number, siteId: string) {
@@ -160,6 +204,8 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
     patchRow(rowIndex, {
       siteId,
       projectId: site?.project?.id ?? '',
+      projectLabel: entityLabel(site?.project),
+      siteLabel: entityLabel(site),
       placeOfWork: site?.name ?? '',
       workLocation: siteId ? 'SITE' : 'OFFICE',
     });
@@ -168,16 +214,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
   function addRow() {
     setRows((previous) => [
       ...previous,
-      {
-        projectId: '',
-        siteId: '',
-        taskName: '',
-        billingType: 'BILLABLE',
-        activity: defaultTaskType,
-        workLocation: 'SITE',
-        placeOfWork: '',
-        hoursMap: emptyHours(days),
-      },
+      createEmptyRow(days, defaultTaskType),
     ]);
   }
 
@@ -189,35 +226,75 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
     return row.projectId ? sites.filter((site) => site.project?.id === row.projectId) : sites;
   }
 
-  async function handleSave() {
+  function rowsValidationError() {
+    if (!rows.length) {
+      return 'Ajoutez au moins une ligne avant de sauvegarder ou soumettre.';
+    }
+
     const invalidRow = rows.find(
       (row) => !row.taskName.trim() || !row.activity || (row.workLocation === 'SITE' && !row.siteId),
     );
     if (invalidRow) {
-      setError('Chaque ligne doit avoir un type de tache, un chantier et une description.');
-      return;
+      return 'Chaque ligne doit avoir un type de tache, un chantier et une description.';
+    }
+
+    const totalHours = rows.reduce(
+      (sum, row) => sum + days.reduce((daySum, day) => daySum + (row.hoursMap[dateKey(day)] ?? 0), 0),
+      0,
+    );
+
+    if (totalHours <= 0) {
+      return 'Ajoutez au moins une heure avant de sauvegarder ou soumettre.';
+    }
+
+    return null;
+  }
+
+  function serializeRows() {
+    return rows.map((row) => ({
+      siteId: row.siteId || undefined,
+      taskName: row.taskName.trim(),
+      billingType: row.billingType,
+      activity: row.activity,
+      workLocation: row.workLocation,
+      placeOfWork: row.placeOfWork || undefined,
+      entries: days.map((day) => ({ entryDate: dateKey(day), hours: row.hoursMap[dateKey(day)] ?? 0 })),
+    }));
+  }
+
+  async function saveCurrentRows(refreshAfterSave = true) {
+    const validationError = rowsValidationError();
+    if (validationError) {
+      setError(validationError);
+      return false;
     }
 
     setSaving(true);
     setError(null);
     try {
       await api.updateTimesheet(timesheet.id, {
-        lines: rows.map((row) => ({
-          siteId: row.siteId || undefined,
-          taskName: row.taskName.trim(),
-          billingType: row.billingType,
-          activity: row.activity,
-          workLocation: row.workLocation,
-          placeOfWork: row.placeOfWork || undefined,
-          entries: days.map((day) => ({ entryDate: dateKey(day), hours: row.hoursMap[dateKey(day)] ?? 0 })),
-        })),
+        lines: serializeRows(),
       });
-      onRefresh?.();
+      if (refreshAfterSave) {
+        onRefresh?.();
+      }
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Erreur de sauvegarde');
+      return false;
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleSave() {
+    await saveCurrentRows();
+  }
+
+  async function handleSubmit() {
+    const saved = await saveCurrentRows(false);
+    if (!saved) return;
+    await doTransition(() => api.submitTimesheet(timesheet.id));
   }
 
   async function doTransition(action: () => Promise<unknown>, goBack = false) {
@@ -269,11 +346,11 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
           {canSubmit && (
             <ConfirmDialog
               title="Soumettre la timesheet"
-              description="La timesheet sera soumise a validation."
+              description="Les lignes seront sauvegardees avant la soumission."
               confirmLabel="Soumettre"
-              onConfirm={() => doTransition(() => api.submitTimesheet(timesheet.id))}
+              onConfirm={handleSubmit}
               trigger={
-                <PrimaryButton type="button" disabled={transitioning}>
+                <PrimaryButton type="button" disabled={saving || transitioning}>
                   <Send className="h-4 w-4" /> Soumettre
                 </PrimaryButton>
               }
@@ -351,7 +428,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
             {rows.length === 0 && (
               <tr>
                 <td colSpan={6 + days.length} className="px-4 py-10 text-center text-sm text-mutedText">
-                  Aucune ligne. Ajoutez une ligne pour commencer.
+                  {canEdit ? 'Aucune ligne. Ajoutez une ligne pour commencer.' : 'Aucune donnee saisie pour cette timesheet.'}
                 </td>
               </tr>
             )}
@@ -380,7 +457,9 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                         ))}
                       </select>
                     ) : (
-                      <span className="text-xs text-mutedText">{row.projectId ? projects.find((p) => p.id === row.projectId)?.name : '-'}</span>
+                      <span className="text-xs text-mutedText">
+                        {row.projectLabel || (row.projectId ? entityLabel(projects.find((p) => p.id === row.projectId)) : '') || '-'}
+                      </span>
                     )}
                   </td>
 
@@ -399,7 +478,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                         ))}
                       </select>
                     ) : (
-                      <span className="text-xs text-mutedText">{row.placeOfWork || '-'}</span>
+                      <span className="text-xs text-mutedText">{row.siteLabel || row.placeOfWork || '-'}</span>
                     )}
                   </td>
 

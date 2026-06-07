@@ -24,7 +24,7 @@ type Employee = {
   status: string;
   user: { id: string; firstName: string; lastName: string; email: string; role: string };
 };
-type TimesheetSettings = { timesheetPeriodDays: number };
+type TimesheetSettings = { timesheetPeriod: 'WEEKLY' | 'MONTHLY'; timesheetPeriodDays: number };
 
 // ─── Modal Nouvelle Timesheet ─────────────────────────────────────────────────
 
@@ -43,9 +43,10 @@ function NewTimesheetModal({ onCreated }: { onCreated: () => void }) {
   );
   const { data: timesheetSettings } = useApiData<TimesheetSettings>(
     () => api.settingsTimesheet() as Promise<TimesheetSettings>,
-    { timesheetPeriodDays: 7 },
+    { timesheetPeriod: 'WEEKLY', timesheetPeriodDays: 7 },
   );
-  const periodDays = Math.max(1, Math.min(31, timesheetSettings.timesheetPeriodDays || 7));
+  const periodDays = timesheetSettings.timesheetPeriod === 'MONTHLY' ? 30 : 7;
+  const periodLabel = timesheetSettings.timesheetPeriod === 'MONTHLY' ? 'Mensuelle (30 j)' : 'Hebdomadaire (7 j)';
 
   // Auto-fill the tenant-configured period when start is set.
   function handleStartChange(val: string) {
@@ -101,6 +102,9 @@ function NewTimesheetModal({ onCreated }: { onCreated: () => void }) {
                 ))}
               </SelectField>
             )}
+            <div className="rounded-md border border-borderSoft bg-surfaceHover px-3 py-2 text-xs text-mutedText">
+              Périodicité configurée : <span className="font-semibold text-bodyText">{periodLabel}</span>
+            </div>
             <DateField label="Date de début" value={periodStart} onChange={(e) => handleStartChange(e.target.value)} />
             <DateField label="Date de fin" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
             {error && <p className="text-sm text-dangerText">{error}</p>}

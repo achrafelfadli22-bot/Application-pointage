@@ -8,7 +8,7 @@ import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateHolidayDto } from './dto/update-holiday.dto';
 import { UpdateLeaveTypeDto } from './dto/update-leave-type.dto';
 import { UpdateSiteOptionsDto } from './dto/update-site-options.dto';
-import { UpdateTimesheetSettingsDto } from './dto/update-timesheet-settings.dto';
+import { TimesheetPeriodType, UpdateTimesheetSettingsDto } from './dto/update-timesheet-settings.dto';
 import { UpdateTimesheetTaskTypesDto } from './dto/update-timesheet-task-types.dto';
 
 const DEFAULT_TIMESHEET_TASK_TYPES = [
@@ -143,23 +143,26 @@ export class SettingsService {
       update: {},
     });
 
-    return { timesheetPeriodDays: settings.timesheetPeriodDays };
+    return {
+      timesheetPeriod: settings.timesheetPeriodDays === 30 ? TimesheetPeriodType.MONTHLY : TimesheetPeriodType.WEEKLY,
+      timesheetPeriodDays: settings.timesheetPeriodDays,
+    };
   }
 
   async updateTimesheetSettings(user: CurrentUserContext, dto: UpdateTimesheetSettingsDto) {
     const tenantId = this.requireTenant(user);
+    const periodDays = dto.timesheetPeriod === TimesheetPeriodType.MONTHLY ? 30 : 7;
+
     const settings = await this.prisma.tenantSettings.upsert({
       where: { tenantId },
-      create: {
-        tenantId,
-        timesheetPeriodDays: dto.timesheetPeriodDays ?? 7,
-      },
-      update: {
-        ...(dto.timesheetPeriodDays !== undefined && { timesheetPeriodDays: dto.timesheetPeriodDays }),
-      },
+      create: { tenantId, timesheetPeriodDays: periodDays },
+      update: { timesheetPeriodDays: periodDays },
     });
 
-    return { timesheetPeriodDays: settings.timesheetPeriodDays };
+    return {
+      timesheetPeriod: settings.timesheetPeriodDays === 30 ? TimesheetPeriodType.MONTHLY : TimesheetPeriodType.WEEKLY,
+      timesheetPeriodDays: settings.timesheetPeriodDays,
+    };
   }
 
   async siteOptions(user: CurrentUserContext) {

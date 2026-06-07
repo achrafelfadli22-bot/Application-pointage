@@ -3,6 +3,7 @@
 import type { ApiResponse } from '@pointage360/types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+const AUTH_COOKIE_NAME = 'pointage360.auth';
 
 export type LoginPayload = {
   email: string;
@@ -34,6 +35,19 @@ function storage() {
   return window.localStorage;
 }
 
+function setAuthCookie() {
+  if (typeof document === 'undefined') return;
+
+  const secure = window.location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${AUTH_COOKIE_NAME}=1; Path=/; Max-Age=${60 * 60 * 24 * 7}; SameSite=Lax${secure}`;
+}
+
+function clearAuthCookie() {
+  if (typeof document === 'undefined') return;
+
+  document.cookie = `${AUTH_COOKIE_NAME}=; Path=/; Max-Age=0; SameSite=Lax`;
+}
+
 export const tokenStore = {
   get accessToken() {
     return storage()?.getItem('pointage360.accessToken') ?? null;
@@ -43,19 +57,60 @@ export const tokenStore = {
   },
   get session() {
     const raw = storage()?.getItem('pointage360.session');
-    return raw ? (JSON.parse(raw) as SessionPayload) : null;
+    if (!raw) return null;
+
+    try {
+      return JSON.parse(raw) as SessionPayload;
+    } catch {
+      this.clear();
+      return null;
+    }
   },
   set(session: SessionPayload) {
     storage()?.setItem('pointage360.accessToken', session.accessToken);
     storage()?.setItem('pointage360.refreshToken', session.refreshToken);
     storage()?.setItem('pointage360.session', JSON.stringify(session));
+    setAuthCookie();
   },
   clear() {
     storage()?.removeItem('pointage360.accessToken');
     storage()?.removeItem('pointage360.refreshToken');
     storage()?.removeItem('pointage360.session');
+    clearAuthCookie();
   },
 };
+
+async function readApiResponse<T>(response: Response): Promise<ApiResponse<T>> {
+  const text = await response.text();
+
+  if (!text) {
+    return response.ok
+      ? { success: true, data: undefined as T }
+      : { success: false, error: response.statusText || `HTTP ${response.status}`, statusCode: response.status };
+  }
+
+  const trimmed = text.trim();
+  const contentType = response.headers.get('content-type') ?? '';
+  const looksJson = contentType.includes('application/json') || trimmed.startsWith('{') || trimmed.startsWith('[');
+
+  if (looksJson) {
+    try {
+      return JSON.parse(trimmed) as ApiResponse<T>;
+    } catch {
+      return {
+        success: false,
+        error: `Reponse API invalide (${response.status}): ${trimmed.slice(0, 180)}`,
+        statusCode: response.status,
+      };
+    }
+  }
+
+  return {
+    success: false,
+    error: trimmed.slice(0, 240) || response.statusText || `HTTP ${response.status}`,
+    statusCode: response.status,
+  };
+}
 
 async function refreshToken() {
   if (!tokenStore.refreshToken) {
@@ -68,12 +123,15 @@ async function refreshToken() {
     body: JSON.stringify({ refreshToken: tokenStore.refreshToken }),
   });
 
-  if (!response.ok) {
-    tokenStore.clear();
+  const payload = await readApiResponse<SessionPayload>(response);
+
+  if (!response.ok || !payload.success) {
+    if ([401, 403].includes(response.status)) {
+      tokenStore.clear();
+    }
     return false;
   }
 
-  const payload = (await response.json()) as ApiResponse<SessionPayload>;
   if (!payload.data) {
     tokenStore.clear();
     return false;
@@ -106,12 +164,12 @@ export async function apiRequest<T>(path: string, options: RequestInit = {}, ret
     return apiRequest<T>(path, options, false);
   }
 
-  const payload = (await response.json()) as ApiResponse<T>;
+  const payload = await readApiResponse<T>(response);
   if (!response.ok || !payload.success) {
     if (response.status === 403 && payload.error?.toLowerCase().includes('tenant')) {
       redirectToTenantSuspended();
     }
-    throw new Error(payload.error ?? 'Erreur API');
+    throw new Error(payload.error ?? payload.message ?? `Erreur API (${response.status})`);
   }
 
   return payload.data as T;
@@ -190,8 +248,8 @@ export const api = {
       headers,
       body,
     });
-    const payload = (await response.json()) as ApiResponse<unknown>;
-    if (!response.ok || !payload.success) throw new Error(payload.error ?? 'Upload failed');
+    const payload = await readApiResponse<unknown>(response);
+    if (!response.ok || !payload.success) throw new Error(payload.error ?? payload.message ?? 'Upload failed');
     return payload.data;
   },
   reports: (name: string) => apiRequest(`/reports/${name}`),
