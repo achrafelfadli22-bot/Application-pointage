@@ -60,7 +60,7 @@ importers:
         specifier: ^8.48.0
         version: 8.59.4(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
 
-  apps/api:
+  backend:
     dependencies:
       '@nestjs/bullmq':
         specifier: ^11.0.2
@@ -151,17 +151,17 @@ importers:
         specifier: ^5.8.3
         version: 5.9.3
 
-  apps/web:
+  frontend:
     dependencies:
       '@hookform/resolvers':
         specifier: ^5.0.1
         version: 5.4.0(react-hook-form@7.76.1(react@19.2.6))
       '@pointage360/types':
         specifier: workspace:*
-        version: link:../../packages/types
+        version: link:../packages/types
       '@pointage360/ui':
         specifier: workspace:*
-        version: link:../../packages/ui
+        version: link:../packages/ui
       '@radix-ui/react-dialog':
         specifier: ^1.1.14
         version: 1.1.15(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
@@ -216,7 +216,7 @@ importers:
     devDependencies:
       '@pointage360/config':
         specifier: workspace:*
-        version: link:../../packages/config
+        version: link:../packages/config
       '@tailwindcss/postcss':
         specifier: ^4.1.7
         version: 4.3.0

@@ -22,7 +22,7 @@ export default [
     },
     settings: {
       next: {
-        rootDir: ['apps/web/'],
+        rootDir: ['frontend/'],
       },
     },
   },
@@ -40,7 +40,7 @@ export default [
     },
   },
   {
-    files: ['apps/web/**/*.{ts,tsx}'],
+    files: ['frontend/**/*.{ts,tsx}'],
     rules: {
       ...nextPlugin.configs.recommended.rules,
       ...nextPlugin.configs['core-web-vitals'].rules,

@@ -572,6 +572,7 @@ model TenantSettings {
   timesheetTaskTypes   Json     @default("[]")
   siteRoleOptions      Json     @default("[]")
   clientOptions        Json     @default("[]")
+  jobTitleOptions      Json     @default("[]")
   updatedAt            DateTime @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)

@@ -18,9 +18,8 @@ Le projet est concu comme un pilote interne pouvant evoluer vers un vrai produit
 ## Architecture
 
 ```txt
-apps/
-  api/      NestJS backend
-  web/      Next.js frontend
+backend/    NestJS backend
+frontend/   Next.js frontend
 packages/
   config/   eslint, prettier, tsconfig
   types/    types partages
@@ -76,9 +75,18 @@ Variables principales:
 
 ```bash
 pnpm dev
+pnpm dev:api
+pnpm dev:web
 pnpm build
+pnpm build:api
+pnpm build:web
 pnpm typecheck
+pnpm typecheck:api
+pnpm typecheck:web
 pnpm lint
+pnpm lint:api
+pnpm lint:web
+pnpm arch:check
 pnpm db:generate
 pnpm db:migrate
 pnpm db:deploy
