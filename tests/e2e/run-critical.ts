@@ -1,14 +1,25 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
 
 const API_URL = process.env.API_URL ?? 'http://127.0.0.1:4000/api';
-const WEB_URL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000';
+const explicitWebUrl = Boolean(process.env.E2E_BASE_URL);
+let webUrl = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:3000';
 const apiPort = new URL(API_URL).port || '4000';
+const apiProxyUrl = (() => {
+  const parsed = new URL(API_URL);
+  parsed.pathname = '';
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed.toString().replace(/\/$/, '');
+})();
 const rootDir = process.cwd();
+const webDir = join(rootDir, 'frontend');
 const pnpmBin = join(rootDir, 'node_modules', '.bin', process.platform === 'win32' ? 'pnpm.CMD' : 'pnpm');
 const playwrightBin = join(rootDir, 'node_modules', '.bin', process.platform === 'win32' ? 'playwright.CMD' : 'playwright');
-const apiEntry = join(rootDir, 'apps', 'api', 'dist', 'main.js');
+const nextBin = join(webDir, 'node_modules', '.bin', process.platform === 'win32' ? 'next.CMD' : 'next');
+const apiEntry = join(rootDir, 'backend', 'dist', 'main.js');
 
 type ChildProcess = ReturnType<typeof spawn>;
 
@@ -30,12 +41,12 @@ async function waitFor(name: string, url: string, childProcess?: ChildProcess, t
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
-    if (childProcess && childProcess.exitCode !== null) {
-      throw new Error(`${name} process exited with ${childProcess.exitCode}`);
-    }
-
     if (await urlAvailable(url)) {
       return;
+    }
+
+    if (childProcess && childProcess.exitCode !== null) {
+      throw new Error(`${name} process exited with ${childProcess.exitCode}`);
     }
 
     await new Promise((resolve) => setTimeout(resolve, 1000));
@@ -44,16 +55,49 @@ async function waitFor(name: string, url: string, childProcess?: ChildProcess, t
   throw new Error(`${name} did not become ready on ${url}`);
 }
 
-function spawnCommand(command: string, args: string[], env: NodeJS.ProcessEnv = process.env) {
+async function portIsFree(port: number) {
+  return new Promise<boolean>((resolve) => {
+    const server = createServer();
+    server.once('error', () => resolve(false));
+    server.once('listening', () => {
+      server.close(() => resolve(true));
+    });
+    server.listen(port);
+  });
+}
+
+async function resolveWebUrl() {
+  if (explicitWebUrl && (await urlAvailable(webUrl))) {
+    return webUrl;
+  }
+
+  const parsed = new URL(webUrl);
+  const initialPort = Number(parsed.port || 3000);
+  if (await portIsFree(initialPort)) {
+    return webUrl;
+  }
+
+  for (let port = initialPort + 1; port <= initialPort + 20; port += 1) {
+    if (await portIsFree(port)) {
+      parsed.port = String(port);
+      webUrl = parsed.toString().replace(/\/$/, '');
+      return webUrl;
+    }
+  }
+
+  throw new Error(`No free web port found near ${initialPort}`);
+}
+
+function spawnCommand(command: string, args: string[], env: NodeJS.ProcessEnv = process.env, cwd = rootDir) {
   const windows = process.platform === 'win32';
   return windows
     ? spawn(process.env.ComSpec ?? 'cmd.exe', ['/d', '/c', command, ...args], {
-        cwd: rootDir,
+        cwd,
         env,
         stdio: 'inherit',
       })
     : spawn(command, args, {
-        cwd: rootDir,
+        cwd,
         env,
         stdio: 'inherit',
       });
@@ -117,15 +161,23 @@ async function main() {
       await waitFor('API', `${API_URL}/health/live`, apiProcess, 60_000);
     }
 
-    if (!(await urlAvailable(WEB_URL))) {
-      webProcess = spawnCommand(pnpmBin, ['--filter', '@pointage360/web', 'run', 'dev'], {
-        ...process.env,
-        NEXT_PUBLIC_API_URL: API_URL,
-      });
+    webUrl = await resolveWebUrl();
+    if (!(await urlAvailable(webUrl))) {
+      const webPort = new URL(webUrl).port || '3000';
+      webProcess = spawnCommand(
+        nextBin,
+        ['dev', '--port', webPort],
+        {
+          ...process.env,
+          API_PROXY_URL: apiProxyUrl,
+          NEXT_PUBLIC_API_URL: '/api',
+        },
+        webDir,
+      );
       try {
-        await waitFor('web app', WEB_URL, webProcess);
+        await waitFor('web app', webUrl, webProcess);
       } catch (error) {
-        if (!(await urlAvailable(WEB_URL))) {
+        if (!(await urlAvailable(webUrl))) {
           throw error;
         }
 
@@ -137,7 +189,7 @@ async function main() {
     runChecked(playwrightBin, ['test'], {
       ...process.env,
       API_URL,
-      E2E_BASE_URL: WEB_URL,
+      E2E_BASE_URL: webUrl,
       PLAYWRIGHT_SKIP_WEB_SERVER: 'true',
     });
   } finally {

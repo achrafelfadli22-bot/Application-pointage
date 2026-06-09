@@ -197,7 +197,7 @@ export default function TimesheetsPage() {
               }
             />
           )}
-          {canManage && ['SUBMITTED', 'N1_APPROVED'].includes(row.original.status) && (
+          {canManage && row.original.user.id !== myUserId && ['SUBMITTED', 'N1_APPROVED'].includes(row.original.status) && (
             <>
               <ConfirmDialog
                 title="Approuver la timesheet"

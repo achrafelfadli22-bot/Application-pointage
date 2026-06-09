@@ -199,11 +199,12 @@ function EditProjectModal({
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  const projectId = params?.id ?? '';
   const myRole = tokenStore.session?.role ?? '';
   const canEdit = myRole === 'RESOURCE_MANAGER';
-  const { data: project, refresh } = useApiData<Project>(() => api.project(params.id) as Promise<Project>, {
+  const { data: project, refresh } = useApiData<Project>(() => api.project(projectId) as Promise<Project>, {
     ...fallbackProject,
-    id: params.id,
+    id: projectId,
   });
   const { data: employees } = useApiData<Employee[]>(
     () => (canEdit ? (api.employees() as Promise<Employee[]>) : Promise.resolve([])),

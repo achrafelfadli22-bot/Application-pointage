@@ -4,22 +4,22 @@ import { AuditLogService } from '../audit-log/audit-log.service';
 import { HierarchyService } from '../common/hierarchy.service';
 import { CurrentUserContext } from '../common/types';
 import { NotificationsService } from '../notifications/notifications.service';
-import { PrismaService } from '../prisma/prisma.service';
 import { CreateTimesheetDto } from './dto/create-timesheet.dto';
 import { TimesheetLineDto } from './dto/timesheet-line-entry.dto';
 import { UpdateTimesheetDto } from './dto/update-timesheet.dto';
+import { TimesheetsRepository } from './timesheets.repository';
 
 @Injectable()
 export class TimesheetsService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly repository: TimesheetsRepository,
     private readonly auditLog: AuditLogService,
     private readonly notifications: NotificationsService,
     private readonly hierarchy: HierarchyService,
   ) {}
 
   async findAll(user: CurrentUserContext, filters: { status?: TimesheetStatus; periodStart?: string; periodEnd?: string }) {
-    return this.prisma.timesheet.findMany({
+    return this.repository.findMany({
       where: {
         ...(await this.scope(user)),
         status: filters.status,
@@ -48,7 +48,7 @@ export class TimesheetsService {
       }
     }
 
-    return this.prisma.timesheet.create({
+    return this.repository.create({
       data: {
         tenantId: user.tenantId,
         userId: ownerId,
@@ -60,7 +60,7 @@ export class TimesheetsService {
   }
 
   async findOne(user: CurrentUserContext, id: string) {
-    return this.prisma.timesheet.findFirstOrThrow({
+    const timesheet = await this.repository.findFirstOrThrow({
       where: { id, ...(await this.scope(user)) },
       include: {
         user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
@@ -75,24 +75,27 @@ export class TimesheetsService {
         },
       },
     });
+
+    return {
+      ...timesheet,
+      permissions: {
+        canEdit: await this.canUpdateTimesheet(user, timesheet),
+      },
+    };
   }
 
   async update(user: CurrentUserContext, id: string, dto: UpdateTimesheetDto) {
-    const timesheet = await this.prisma.timesheet.findFirstOrThrow({
+    const timesheet = await this.repository.findFirstOrThrow({
       where: { id, ...(await this.scope(user)) },
       include: { lines: true },
     });
 
-    if (timesheet.status !== TimesheetStatus.DRAFT && timesheet.status !== TimesheetStatus.REOPENED) {
-      throw new BadRequestException('Approved or submitted timesheets are locked');
+    if (!(await this.canUpdateTimesheet(user, timesheet))) {
+      throw new ForbiddenException('Vous ne pouvez pas modifier cette timesheet dans son etat actuel.');
     }
 
-    if (user.role === UserRole.EMPLOYEE && timesheet.userId !== user.userId) {
-      throw new ForbiddenException('Employees can update only their own timesheets');
-    }
-
-    await this.prisma.$transaction(async (tx) => {
-      await tx.timesheetLine.deleteMany({ where: { timesheetId: id } });
+    await this.repository.transaction(async (tx) => {
+      await this.repository.deleteLines(tx, id);
       for (const line of dto.lines) {
         await this.createLineWithEntries(tx, timesheet.tenantId, id, line);
       }
@@ -109,8 +112,49 @@ export class TimesheetsService {
     return this.findOne(user, id);
   }
 
+  private async canUpdateTimesheet(
+    user: CurrentUserContext,
+    timesheet: {
+      tenantId: string;
+      userId: string;
+      status: TimesheetStatus;
+      lines: Array<{ siteId: string | null }>;
+    },
+  ) {
+    if (timesheet.status === TimesheetStatus.DRAFT || timesheet.status === TimesheetStatus.REOPENED) {
+      if (timesheet.userId === user.userId) {
+        return true;
+      }
+
+      if (user.role === UserRole.EMPLOYEE) {
+        return false;
+      }
+
+      return [UserRole.SUPER_ADMIN, UserRole.RESOURCE_MANAGER, UserRole.HR, UserRole.PROJECT_MANAGER, UserRole.MANAGER].includes(
+        user.role,
+      );
+    }
+
+    if (timesheet.status === TimesheetStatus.SUBMITTED) {
+      if (timesheet.userId === user.userId) {
+        return false;
+      }
+
+      const level = await this.hierarchy.approvalLevelFor(
+        user,
+        timesheet.tenantId,
+        timesheet.userId,
+        timesheet.lines.map((line) => line.siteId),
+      );
+
+      return level === 'N1' || level === 'BOTH';
+    }
+
+    return false;
+  }
+
   async remove(user: CurrentUserContext, id: string) {
-    const timesheet = await this.prisma.timesheet.findFirstOrThrow({
+    const timesheet = await this.repository.findFirstOrThrow({
       where: {
         id,
         ...(user.role === UserRole.SUPER_ADMIN ? {} : { tenantId: user.tenantId ?? '__missing__' }),
@@ -133,7 +177,7 @@ export class TimesheetsService {
       throw new BadRequestException('Seules les timesheets en brouillon peuvent etre supprimees.');
     }
 
-    await this.prisma.timesheet.delete({ where: { id } });
+    await this.repository.delete({ where: { id } });
 
     await this.auditLog.log({
       tenantId: timesheet.tenantId,
@@ -173,7 +217,7 @@ export class TimesheetsService {
     action: string,
     comment?: string,
   ) {
-    const timesheet = await this.prisma.timesheet.findFirstOrThrow({
+    const timesheet = await this.repository.findFirstOrThrow({
       where: { id, ...(await this.scope(user)) },
       include: { user: true, lines: { select: { siteId: true, entries: { select: { hours: true } } } } },
     });
@@ -184,6 +228,14 @@ export class TimesheetsService {
         throw new ForbiddenException('Vous pouvez soumettre uniquement les timesheets de votre perimetre.');
       }
     }
+
+    if (
+      (nextStatus === TimesheetStatus.APPROVED || nextStatus === TimesheetStatus.REJECTED) &&
+      timesheet.userId === user.userId
+    ) {
+      throw new ForbiddenException('Vous ne pouvez pas valider votre propre timesheet.');
+    }
+
     this.assertTransition(timesheet.status, nextStatus);
 
     if (nextStatus === TimesheetStatus.SUBMITTED || nextStatus === TimesheetStatus.APPROVED) {
@@ -193,7 +245,7 @@ export class TimesheetsService {
     const effectiveStatus = await this.resolveApprovalStatus(user, timesheet, nextStatus);
     const effectiveAction = effectiveStatus === TimesheetStatus.N1_APPROVED ? 'timesheet.n1_approved' : action;
 
-    const updated = await this.prisma.timesheet.update({
+    const updated = await this.repository.update({
       where: { id },
       data: {
         status: effectiveStatus,
@@ -207,7 +259,7 @@ export class TimesheetsService {
       include: { user: true },
     });
 
-    await this.prisma.approvalAction.create({
+    await this.repository.createApprovalAction({
       data: {
         tenantId: timesheet.tenantId,
         entityType: 'TIMESHEET',
@@ -254,12 +306,10 @@ export class TimesheetsService {
     }
 
     if (line.siteId) {
-      await tx.site.findFirstOrThrow({
-        where: { id: line.siteId, tenantId, deletedAt: null },
-      });
+      await this.repository.findSiteForLine(tx, line.siteId, tenantId);
     }
 
-    await tx.timesheetLine.create({
+    await this.repository.createLine(tx, {
       data: {
         tenantId,
         timesheetId,

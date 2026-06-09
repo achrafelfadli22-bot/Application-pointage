@@ -14,7 +14,7 @@ interface MobileDrawerProps {
 }
 
 export function MobileDrawer({ open, onClose }: MobileDrawerProps) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const router   = useRouter();
   const role     = tokenStore.session?.role ?? '';
 

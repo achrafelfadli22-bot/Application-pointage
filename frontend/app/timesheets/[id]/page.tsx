@@ -31,6 +31,7 @@ type Timesheet = {
   periodEnd: string;
   status: string;
   rejectionReason?: string | null;
+  permissions?: { canEdit?: boolean };
   user: { id: string; firstName: string; lastName: string };
   approvedBy?: { firstName: string; lastName: string } | null;
   lines: TLine[];
@@ -41,6 +42,7 @@ const fallback: Timesheet = {
   periodStart: new Date().toISOString(),
   periodEnd: new Date().toISOString(),
   status: 'DRAFT',
+  permissions: { canEdit: false },
   user: { id: '', firstName: '', lastName: '' },
   lines: [],
 };
@@ -56,8 +58,9 @@ function formatPeriod(start?: string, end?: string) {
 
 export default function TimesheetDetailPage() {
   const params = useParams<{ id: string }>();
+  const timesheetId = params?.id ?? '';
   const { data, loading, error, refresh } = useApiData<Timesheet>(
-    () => api.timesheet(params.id) as Promise<Timesheet>,
+    () => api.timesheet(timesheetId) as Promise<Timesheet>,
     fallback,
   );
   const name = employeeName(data.user);

@@ -55,3 +55,33 @@ test('authenticated resource manager can open timesheets', async ({ page }) => {
   await expect(page.getByRole('heading', { name: /^timesheets$/i })).toBeVisible();
   await expect(page.getByRole('button', { name: /nouvelle timesheet/i })).toBeVisible();
 });
+
+test('timesheet status filters are clickable and keep the list usable', async ({ page }) => {
+  await loginUi(page);
+  await page.getByRole('link', { name: 'Timesheets', exact: true }).click();
+
+  const draftFilter = page.getByRole('button', { name: /brouillon/i });
+  await draftFilter.click();
+  await expect(draftFilter).toHaveClass(/bg-accentLight/);
+  await expect(page.getByRole('table')).toBeVisible();
+
+  const allFilter = page.getByRole('button', { name: /toutes/i });
+  await allFilter.click();
+  await expect(allFilter).toHaveClass(/bg-accentLight/);
+  await expect(page.getByRole('button', { name: /nouvelle timesheet/i })).toBeVisible();
+});
+
+test('new timesheet modal exposes resource and configured period fields', async ({ page }) => {
+  await loginUi(page);
+  await page.getByRole('link', { name: 'Timesheets', exact: true }).click();
+  await page.getByRole('button', { name: /nouvelle timesheet/i }).click();
+
+  const dialog = page.getByRole('dialog', { name: /nouvelle timesheet/i });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(/ressource/i)).toBeVisible();
+  await expect(dialog.getByText(/mensuelle|hebdomadaire/i)).toBeVisible();
+  await expect(dialog.locator('input[type="date"]')).toHaveCount(2);
+
+  await dialog.locator('input[type="date"]').first().fill('2026-06-01');
+  await expect(dialog.locator('input[type="date"]').nth(1)).not.toHaveValue('');
+});

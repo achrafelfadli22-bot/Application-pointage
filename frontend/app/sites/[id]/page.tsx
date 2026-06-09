@@ -525,11 +525,12 @@ function AssignEmployeeModal({
 export default function SiteDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const fallback = (demoSites.find((s) => s.id === params.id) as Site | undefined) ?? fallbackSite;
+  const siteId = params?.id ?? '';
+  const fallback = (demoSites.find((s) => s.id === siteId) as Site | undefined) ?? fallbackSite;
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: site, refresh } = useApiData<Site>(
-    () => api.site(params.id) as Promise<Site>,
+    () => api.site(siteId) as Promise<Site>,
     { ...fallback, assignments: [], attendancePunches: [] },
   );
   const myRole = tokenStore.session?.role ?? '';

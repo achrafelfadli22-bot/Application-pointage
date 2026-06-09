@@ -8,7 +8,7 @@ import { tokenStore } from '@/lib/api-client';
 import { NAV_ITEMS, ROLE_LABELS } from '@/lib/nav-items';
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const router = useRouter();
   const role = tokenStore.session?.role ?? '';
 

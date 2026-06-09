@@ -49,6 +49,7 @@ type Timesheet = {
   periodEnd: string;
   status: string;
   rejectionReason?: string | null;
+  permissions?: { canEdit?: boolean };
   user: { id: string; firstName: string; lastName: string };
   approvedBy?: { firstName: string; lastName: string } | null;
   lines: Line[];
@@ -138,10 +139,10 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
   const isWaitingApproval = ['SUBMITTED', 'N1_APPROVED'].includes(timesheet.status);
   const isApprovedOrRejected = ['APPROVED', 'REJECTED'].includes(timesheet.status);
 
-  const canEdit = isDraftOrReopened && (isOwner || isEditor);
+  const canEdit = timesheet.permissions?.canEdit ?? (isDraftOrReopened && (isOwner || isEditor));
   const canSubmit = isDraftOrReopened && (isOwner || isEditor);
-  const canApprove = isWaitingApproval && isApprover;
-  const canReject = isWaitingApproval && isApprover;
+  const canApprove = isWaitingApproval && isApprover && !isOwner;
+  const canReject = isWaitingApproval && isApprover && !isOwner;
   const canReopen = isApprovedOrRejected && isReopener;
   const canDelete = timesheet.status === 'DRAFT' && isOwner;
 

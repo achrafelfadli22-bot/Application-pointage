@@ -12,7 +12,7 @@ const tabs = [
 ];
 
 export function TopTabs() {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
 
   return (
     <div className="overflow-x-auto border-b border-borderSoft bg-white">

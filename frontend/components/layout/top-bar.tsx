@@ -124,7 +124,7 @@ type Notif = {
 };
 
 export function TopBar({ onMenuOpen }: { onMenuOpen?: () => void }) {
-  const pathname = usePathname();
+  const pathname = usePathname() ?? '';
   const [detailCrumb, setDetailCrumb] = useState<string | null>(null);
   const crumbs = getBreadcrumbs(pathname, detailCrumb);
   const session = tokenStore.session;

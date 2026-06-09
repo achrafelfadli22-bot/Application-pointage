@@ -156,10 +156,27 @@ export class HierarchyService {
           })
         ).map((assignment) => assignment.site);
 
-    return {
-      n1Ids: new Set(sites.map((site) => site.managerId).filter(Boolean) as string[]),
-      n2Ids: new Set(sites.map((site) => site.project?.projectManagerId).filter(Boolean) as string[]),
-    };
+    const n1Ids = new Set<string>();
+    const n2Ids = new Set<string>();
+
+    for (const site of sites) {
+      const managerId = site.managerId;
+      const projectManagerId = site.project?.projectManagerId;
+
+      if (managerId && managerId !== targetUserId) {
+        n1Ids.add(managerId);
+        if (projectManagerId && projectManagerId !== targetUserId) {
+          n2Ids.add(projectManagerId);
+        }
+        continue;
+      }
+
+      if (projectManagerId && projectManagerId !== targetUserId) {
+        n1Ids.add(projectManagerId);
+      }
+    }
+
+    return { n1Ids, n2Ids };
   }
 
   activeAssignmentWhere(): Prisma.SiteAssignmentWhereInput {

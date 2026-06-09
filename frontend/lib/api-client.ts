@@ -283,6 +283,8 @@ export const api = {
     apiRequest('/employees', { method: 'POST', body: JSON.stringify(data) }),
   updateEmployee: (id: string, data: Record<string, unknown>) =>
     apiRequest(`/employees/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteEmployee: (id: string) =>
+    apiRequest(`/employees/${id}`, { method: 'DELETE' }),
   createSite: (data: Record<string, unknown>) =>
     apiRequest('/sites', { method: 'POST', body: JSON.stringify(data) }),
   updateSite: (id: string, data: Record<string, unknown>) =>

@@ -7,8 +7,8 @@ import { AuthContextCacheService } from '../common/auth-context-cache.service';
 import { HierarchyService } from '../common/hierarchy.service';
 import { assertStrongPassword } from '../common/password-policy';
 import { CurrentUserContext } from '../common/types';
-import { PrismaService } from '../prisma/prisma.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
+import { EmployeesRepository } from './employees.repository';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 
 type EmployeeFilters = {
@@ -21,7 +21,7 @@ type EmployeeFilters = {
 @Injectable()
 export class EmployeesService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly repository: EmployeesRepository,
     private readonly auditLog: AuditLogService,
     private readonly config: ConfigService,
     private readonly hierarchy: HierarchyService,
@@ -48,7 +48,7 @@ export class EmployeesService {
       },
     };
 
-    return this.prisma.employeeProfile.findMany({
+    return this.repository.findMany({
       where,
       include: {
         user: {
@@ -83,7 +83,7 @@ export class EmployeesService {
 
   async findOne(user: CurrentUserContext, id: string) {
     const managedUserIds = await this.hierarchy.managedUserIds(user);
-    const employee = await this.prisma.employeeProfile.findFirst({
+    const employee = await this.repository.findFirst({
       where: {
         id,
         ...(this.tenantFilter(user) as Prisma.EmployeeProfileWhereInput),
@@ -116,34 +116,24 @@ export class EmployeesService {
     assertStrongPassword(rawPassword, this.config);
     const passwordHash = await bcrypt.hash(rawPassword, 12);
 
-    const employee = await this.prisma.$transaction(async (tx) => {
-      const createdUser = await tx.user.create({
-        data: {
-          tenantId: user.tenantId,
-          email: dto.email.toLowerCase(),
-          passwordHash,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          phone: dto.phone,
-          role: dto.role,
-        },
-      });
-
-      return tx.employeeProfile.create({
-        data: {
-          tenantId: user.tenantId!,
-          userId: createdUser.id,
-          employeeNumber: dto.employeeNumber,
-          jobTitle: dto.jobTitle,
-          contractType: dto.contractType,
-          hireDate: new Date(dto.hireDate),
-          mainSiteId: dto.mainSiteId,
-          annualLeaveBalance: dto.annualLeaveBalance ?? 0,
-          hourlyRate: dto.hourlyRate,
-          status: dto.status,
-        },
-        include: { user: true, mainSite: true },
-      });
+    const employee = await this.repository.createWithUser({
+      tenantId: user.tenantId,
+      email: dto.email.toLowerCase(),
+      passwordHash,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      phone: dto.phone,
+      role: dto.role,
+      profileData: {
+        employeeNumber: dto.employeeNumber,
+        jobTitle: dto.jobTitle,
+        contractType: dto.contractType,
+        hireDate: new Date(dto.hireDate),
+        mainSiteId: dto.mainSiteId,
+        annualLeaveBalance: dto.annualLeaveBalance ?? 0,
+        hourlyRate: dto.hourlyRate,
+        status: dto.status,
+      },
     });
 
     await this.auditLog.log({
@@ -159,7 +149,7 @@ export class EmployeesService {
   }
 
   async update(user: CurrentUserContext, id: string, dto: UpdateEmployeeDto) {
-    const employee = await this.prisma.employeeProfile.findFirst({
+    const employee = await this.repository.findFirst({
       where: { id, ...(this.tenantFilter(user) as Prisma.EmployeeProfileWhereInput) },
     });
 
@@ -173,33 +163,27 @@ export class EmployeesService {
     assertStrongPassword(dto.password, this.config);
     const passwordHash = dto.password ? await bcrypt.hash(dto.password, 12) : undefined;
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      await tx.user.update({
-        where: { id: employee.userId },
-        data: {
-          email: dto.email?.toLowerCase(),
-          passwordHash,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          phone: dto.phone,
-          role: dto.role,
-        },
-      });
-
-      return tx.employeeProfile.update({
-        where: { id },
-        data: {
-          employeeNumber: dto.employeeNumber,
-          jobTitle: dto.jobTitle,
-          contractType: dto.contractType,
-          hireDate: dto.hireDate ? new Date(dto.hireDate) : undefined,
-          mainSiteId: dto.mainSiteId,
-          annualLeaveBalance: dto.annualLeaveBalance,
-          hourlyRate: dto.hourlyRate,
-          status: dto.status,
-        },
-        include: { user: true, mainSite: true },
-      });
+    const updated = await this.repository.updateWithUser({
+      id,
+      userId: employee.userId,
+      userData: {
+        email: dto.email?.toLowerCase(),
+        passwordHash,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        phone: dto.phone,
+        role: dto.role,
+      },
+      profileData: {
+        employeeNumber: dto.employeeNumber,
+        jobTitle: dto.jobTitle,
+        contractType: dto.contractType,
+        hireDate: dto.hireDate ? new Date(dto.hireDate) : undefined,
+        mainSiteId: dto.mainSiteId,
+        annualLeaveBalance: dto.annualLeaveBalance,
+        hourlyRate: dto.hourlyRate,
+        status: dto.status,
+      },
     });
 
     await this.auditLog.log({
@@ -216,18 +200,24 @@ export class EmployeesService {
   }
 
   async softDelete(user: CurrentUserContext, id: string) {
-    const employee = await this.prisma.employeeProfile.findFirst({
+    const employee = await this.repository.findFirst({
       where: { id, ...(this.tenantFilter(user) as Prisma.EmployeeProfileWhereInput) },
+      include: { user: { select: { id: true, role: true } } },
     });
 
     if (!employee) {
       throw new NotFoundException('Employee not found');
     }
 
-    const deleted = await this.prisma.user.update({
-      where: { id: employee.userId },
-      data: { deletedAt: new Date(), status: 'INACTIVE' },
-    });
+    if (employee.userId === user.userId) {
+      throw new ForbiddenException('Vous ne pouvez pas supprimer votre propre compte.');
+    }
+
+    if (employee.user.role !== UserRole.EMPLOYEE && employee.user.role !== UserRole.MANAGER) {
+      throw new ForbiddenException('Le Ressource Manager peut supprimer uniquement les employes et les managers.');
+    }
+
+    const deleted = await this.repository.deactivateEmployee(employee, new Date());
 
     await this.auditLog.log({
       tenantId: user.tenantId,
@@ -235,6 +225,7 @@ export class EmployeesService {
       action: 'employee.deactivated',
       entityType: 'User',
       entityId: deleted.id,
+      metadata: { role: employee.user.role },
     });
 
     await this.authContextCache.clearUser(deleted.id);

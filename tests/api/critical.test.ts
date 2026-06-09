@@ -29,7 +29,14 @@ type Timesheet = {
   status: string;
 };
 
+type EmployeeProfile = {
+  id: string;
+  userId: string;
+  user: { id: string; email: string; role: string; status: string };
+};
+
 const runOffsetDays = 420 + ((Math.floor(Date.now() / 1000) % 50_000) * 7);
+const runId = `${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
 
 async function request<T>(
   path: string,
@@ -56,7 +63,17 @@ async function request<T>(
     throw new Error(`API unavailable on ${API_URL}. Start the platform with "pnpm.cmd dev". ${String(error)}`);
   }
 
-  const payload = (await response.json()) as ApiEnvelope<T>;
+  const rawBody = await response.text();
+  let payload: ApiEnvelope<T>;
+  try {
+    payload = rawBody ? (JSON.parse(rawBody) as ApiEnvelope<T>) : ({ success: response.ok } as ApiEnvelope<T>);
+  } catch {
+    payload = {
+      success: false,
+      error: rawBody || response.statusText,
+      statusCode: response.status,
+    };
+  }
   const expected = options.expected ?? (options.method === 'POST' ? [200, 201] : 200);
   const expectedStatuses = Array.isArray(expected) ? expected : [expected];
 
@@ -78,6 +95,28 @@ async function login(email = RESOURCE_MANAGER_EMAIL) {
   return request<Session>('/auth/login', {
     method: 'POST',
     body: { email, password: PASSWORD },
+  });
+}
+
+async function createEmployee(token: string, role: string, index: number) {
+  const normalizedRole = role.toLowerCase().replaceAll('_', '-');
+
+  return request<EmployeeProfile>('/employees', {
+    method: 'POST',
+    token,
+    body: {
+      email: `critical-${normalizedRole}-${runId}-${index}@futura-expert.com`,
+      password: PASSWORD,
+      firstName: `Critical ${role}`,
+      lastName: String(index),
+      role,
+      employeeNumber: `CRT-${runId}-${index}`,
+      jobTitle: role === 'MANAGER' ? 'Chef de site' : role,
+      contractType: 'CDI',
+      hireDate: '2026-01-01',
+      annualLeaveBalance: 18,
+      status: 'ACTIVE',
+    },
   });
 }
 
@@ -191,6 +230,133 @@ export async function runCriticalApiTests() {
 
     await request(`/timesheets/${created.id}/approve`, {
       method: 'POST',
+      token: resourceManager.accessToken,
+      expected: 403,
+    });
+  });
+
+  await withStep('draft timesheets can be deleted only by their owner', async () => {
+    const start = nextMonday(runOffsetDays + 28);
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+
+    const created = await request<Timesheet>('/timesheets', {
+      method: 'POST',
+      token: resourceManager.accessToken,
+      body: {
+        periodStart: dateOnly(start),
+        periodEnd: dateOnly(end),
+      },
+    });
+
+    const deleted = await request<{ id: string; deleted: boolean }>(`/timesheets/${created.id}`, {
+      method: 'DELETE',
+      token: resourceManager.accessToken,
+    });
+
+    assert.deepEqual(deleted, { id: created.id, deleted: true });
+  });
+
+  await withStep('submitted timesheets cannot be deleted by their owner', async () => {
+    const start = nextMonday(runOffsetDays + 42);
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+
+    const created = await request<Timesheet>('/timesheets', {
+      method: 'POST',
+      token: resourceManager.accessToken,
+      body: {
+        periodStart: dateOnly(start),
+        periodEnd: dateOnly(end),
+      },
+    });
+
+    await request<Timesheet>(`/timesheets/${created.id}`, {
+      method: 'PUT',
+      token: resourceManager.accessToken,
+      body: {
+        lines: [
+          {
+            taskName: 'Delete guard test',
+            billingType: 'BILLABLE',
+            activity: 'EXECUTION',
+            workLocation: 'OFFICE',
+            placeOfWork: 'Bureau Futura',
+            entries: [{ entryDate: dateOnly(start), hours: 1 }],
+          },
+        ],
+      },
+    });
+
+    await request<Timesheet>(`/timesheets/${created.id}/submit`, {
+      method: 'POST',
+      token: resourceManager.accessToken,
+    });
+
+    await request(`/timesheets/${created.id}`, {
+      method: 'DELETE',
+      token: resourceManager.accessToken,
+      expected: 400,
+    });
+  });
+
+  await withStep('managers cannot approve their own submitted timesheets', async () => {
+    const manager = await createEmployee(resourceManager.accessToken, 'MANAGER', 1);
+    const managerSession = await login(manager.user.email);
+    const start = nextMonday(runOffsetDays + 56);
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+
+    const created = await request<Timesheet>('/timesheets', {
+      method: 'POST',
+      token: managerSession.accessToken,
+      body: {
+        periodStart: dateOnly(start),
+        periodEnd: dateOnly(end),
+      },
+    });
+
+    await request<Timesheet>(`/timesheets/${created.id}`, {
+      method: 'PUT',
+      token: managerSession.accessToken,
+      body: {
+        lines: [
+          {
+            taskName: 'Self validation guard',
+            billingType: 'BILLABLE',
+            activity: 'EXECUTION',
+            workLocation: 'OFFICE',
+            placeOfWork: 'Bureau Futura',
+            entries: [{ entryDate: dateOnly(start), hours: 1 }],
+          },
+        ],
+      },
+    });
+
+    await request<Timesheet>(`/timesheets/${created.id}/submit`, {
+      method: 'POST',
+      token: managerSession.accessToken,
+    });
+
+    await request(`/timesheets/${created.id}/approve`, {
+      method: 'POST',
+      token: managerSession.accessToken,
+      expected: 403,
+    });
+  });
+
+  await withStep('resource manager can deactivate employees and managers only', async () => {
+    const employee = await createEmployee(resourceManager.accessToken, 'EMPLOYEE', 2);
+    const deletedEmployee = await request<{ id: string; status: string }>(`/employees/${employee.id}`, {
+      method: 'DELETE',
+      token: resourceManager.accessToken,
+    });
+    assert.equal(deletedEmployee.id, employee.user.id);
+    assert.equal(deletedEmployee.status, 'INACTIVE');
+
+    const hr = await createEmployee(resourceManager.accessToken, 'HR', 3);
+    await request(`/employees/${hr.id}`, {
+      method: 'DELETE',
       token: resourceManager.accessToken,
       expected: 403,
     });

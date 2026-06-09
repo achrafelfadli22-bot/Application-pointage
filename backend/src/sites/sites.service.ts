@@ -3,21 +3,21 @@ import { Prisma, SiteStatus, UserRole, UserStatus } from '@prisma/client';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { HierarchyService } from '../common/hierarchy.service';
 import { CurrentUserContext } from '../common/types';
-import { PrismaService } from '../prisma/prisma.service';
 import { CreateSiteAssignmentDto } from './dto/create-site-assignment.dto';
 import { CreateSiteDto } from './dto/create-site.dto';
+import { SitesRepository } from './sites.repository';
 import { UpdateSiteDto } from './dto/update-site.dto';
 
 @Injectable()
 export class SitesService {
   constructor(
-    private readonly prisma: PrismaService,
+    private readonly repository: SitesRepository,
     private readonly auditLog: AuditLogService,
     private readonly hierarchy: HierarchyService,
   ) {}
 
   findAll(user: CurrentUserContext, filters: { search?: string; status?: SiteStatus }) {
-    return this.prisma.site.findMany({
+    return this.repository.findMany({
       where: {
         ...this.tenantFilter(user, true),
         deletedAt: null,
@@ -41,7 +41,7 @@ export class SitesService {
   }
 
   findOne(user: CurrentUserContext, id: string) {
-    return this.prisma.site.findFirstOrThrow({
+    return this.repository.findFirstOrThrow({
       where: { id, ...this.tenantFilter(user), deletedAt: null },
       include: {
         project: {
@@ -74,7 +74,7 @@ export class SitesService {
       await this.assertProject(user.tenantId, dto.projectId);
     }
 
-    const site = await this.prisma.site.create({
+    const site = await this.repository.create({
       data: {
         tenantId: user.tenantId,
         projectId: dto.projectId,
@@ -113,7 +113,7 @@ export class SitesService {
       await this.assertProject(existing.tenantId, dto.projectId);
     }
 
-    const site = await this.prisma.site.update({
+    const site = await this.repository.update({
       where: { id },
       data: {
         projectId: dto.projectId,
@@ -147,7 +147,7 @@ export class SitesService {
 
   async softDelete(user: CurrentUserContext, id: string) {
     await this.assertSite(user, id);
-    return this.prisma.site.update({
+    return this.repository.update({
       where: { id },
       data: { deletedAt: new Date(), status: SiteStatus.SUSPENDED },
     });
@@ -179,7 +179,7 @@ export class SitesService {
       );
     }
 
-    const employee = await this.prisma.employeeProfile.findFirst({
+    const employee = await this.repository.findActiveEmployee({
       where: {
         tenantId: site.tenantId,
         userId: dto.userId,
@@ -193,7 +193,7 @@ export class SitesService {
       throw new BadRequestException('Only an active employee from this tenant can be assigned');
     }
 
-    const existing = await this.prisma.siteAssignment.findFirst({
+    const existing = await this.repository.findActiveAssignment({
       where: {
         tenantId: site.tenantId,
         siteId: id,
@@ -206,28 +206,16 @@ export class SitesService {
       throw new BadRequestException('This employee already has an active assignment on this site');
     }
 
-    const assignment = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.siteAssignment.create({
-        data: {
-          tenantId: site.tenantId,
-          siteId: id,
-          userId: dto.userId,
-          startDate,
-          endDate,
-          roleOnSite: dto.roleOnSite,
-        },
-        include: {
-          user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
-          site: true,
-        },
-      });
-
-      await tx.employeeProfile.update({
-        where: { id: employee.id },
-        data: { mainSiteId: id },
-      });
-
-      return created;
+    const assignment = await this.repository.createAssignmentAndSetMainSite({
+      employeeProfileId: employee.id,
+      assignmentData: {
+        tenantId: site.tenantId,
+        siteId: id,
+        userId: dto.userId,
+        startDate,
+        endDate,
+        roleOnSite: dto.roleOnSite,
+      },
     });
 
     await this.auditLog.log({
@@ -247,14 +235,14 @@ export class SitesService {
   }
 
   private async assertSite(user: CurrentUserContext, id: string) {
-    return this.prisma.site.findFirstOrThrow({
+    return this.repository.findFirstOrThrow({
       where: { id, ...this.tenantFilter(user), deletedAt: null },
       include: { project: { select: { id: true, projectManagerId: true } } },
     });
   }
 
   private async assertProject(tenantId: string, projectId: string) {
-    return this.prisma.project.findFirstOrThrow({
+    return this.repository.findProjectOrThrow({
       where: { id: projectId, tenantId, deletedAt: null },
     });
   }

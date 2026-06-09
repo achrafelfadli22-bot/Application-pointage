@@ -10,7 +10,7 @@ import { PrimaryButton } from '@/components/ui/buttons';
 function ResetPasswordForm() {
   const searchParams  = useSearchParams();
   const router        = useRouter();
-  const token         = searchParams.get('token') ?? '';
+  const token         = searchParams?.get('token') ?? '';
 
   const [password, setPassword]   = useState('');
   const [confirm, setConfirm]     = useState('');

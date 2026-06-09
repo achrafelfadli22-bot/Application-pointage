@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { ColumnDef } from '@tanstack/react-table';
 import * as Dialog from '@radix-ui/react-dialog';
-import { ArrowLeft, Mail, Pencil, Phone, X } from 'lucide-react';
+import { ArrowLeft, Mail, Pencil, Phone, Trash2, X } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { AccentCard, SummaryCounters } from '@/components/ui/cards';
-import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { DangerButton, PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DataTable } from '@/components/ui/data-table';
 import { DateField, FormField, SelectField } from '@/components/ui/form-fields';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -274,12 +275,14 @@ function EditEmployeeModal({
 
 export default function EmployeeDetailPage() {
   const params = useParams<{ id: string }>();
-  const fallback = (demoEmployees.find((e) => e.id === params.id) ?? demoEmployees[0]) as Employee;
+  const router = useRouter();
+  const employeeId = params?.id ?? '';
+  const fallback = (demoEmployees.find((e) => e.id === employeeId) ?? demoEmployees[0]) as Employee;
   const myRole = tokenStore.session?.role ?? '';
   const canEdit = myRole === 'RESOURCE_MANAGER';
 
   const { data: employee, refresh } = useApiData<Employee>(
-    () => api.employee(params.id) as Promise<Employee>,
+    () => api.employee(employeeId) as Promise<Employee>,
     fallback,
   );
   const { data: sites } = useApiData<Site[]>(
@@ -362,6 +365,12 @@ export default function EmployeeDetailPage() {
   const currentYearBalances = balances.filter((b) => b.year === currentYear);
   const totalUsedDays = currentYearBalances.reduce((acc, b) => acc + Number(b.usedDays), 0);
   const totalRemainingDays = currentYearBalances.reduce((acc, b) => acc + Number(b.remainingDays), 0);
+  const canDelete = canEdit && ['EMPLOYEE', 'MANAGER'].includes(employee.user.role);
+
+  async function handleDelete() {
+    await api.deleteEmployee(employee.id);
+    router.push('/team');
+  }
 
   return (
     <AppShell>
@@ -379,7 +388,23 @@ export default function EmployeeDetailPage() {
             description={`${employee.jobTitle} · ${employee.employeeNumber}`}
             actions={
               canEdit ? (
-                <EditEmployeeModal employee={employee} sites={sites} jobTitleOptions={jobTitleOptions} onUpdated={refresh} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <EditEmployeeModal employee={employee} sites={sites} jobTitleOptions={jobTitleOptions} onUpdated={refresh} />
+                  {canDelete && (
+                    <ConfirmDialog
+                      title="Supprimer la ressource"
+                      description={`Supprimer ${employee.user.firstName} ${employee.user.lastName} ? Le compte sera desactive et retire des affectations actives.`}
+                      confirmLabel="Supprimer"
+                      onConfirm={handleDelete}
+                      trigger={
+                        <DangerButton type="button">
+                          <Trash2 className="h-4 w-4" />
+                          Supprimer
+                        </DangerButton>
+                      }
+                    />
+                  )}
+                </div>
               ) : undefined
             }
           />

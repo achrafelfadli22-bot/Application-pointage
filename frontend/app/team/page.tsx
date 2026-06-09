@@ -3,11 +3,12 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ColumnDef } from '@tanstack/react-table';
-import { Plus, X } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DataTable } from '@/components/ui/data-table';
 import { SelectField, FormField, DateField } from '@/components/ui/form-fields';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -205,6 +206,7 @@ export default function TeamPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [siteFilter, setSiteFilter] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
   const myRole = tokenStore.session?.role ?? '';
   const canManageEmployees = myRole === 'RESOURCE_MANAGER';
   const { data, refresh } = useApiData<Employee[]>(() => api.employees() as Promise<Employee[]>, []);
@@ -230,6 +232,16 @@ export default function TeamPage() {
     return true;
   });
 
+  async function handleDelete(employee: Employee) {
+    setActionError(null);
+    try {
+      await api.deleteEmployee(employee.id);
+      refresh();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'Suppression impossible.');
+    }
+  }
+
   const columns: ColumnDef<Employee, unknown>[] = [
     { header: 'Matricule',          accessorKey: 'employeeNumber' },
     { header: 'Nom complet',        cell: ({ row }) => `${row.original.user.firstName} ${row.original.user.lastName}` },
@@ -242,11 +254,30 @@ export default function TeamPage() {
     { header: 'Solde congés',       cell: ({ row }) => `${row.original.annualLeaveBalance} j` },
     {
       header: 'Actions',
-      cell: ({ row }) => (
-        <Link href={`/team/${row.original.id}`} className="text-sm font-medium text-accent hover:underline">
-          Voir
-        </Link>
-      ),
+      cell: ({ row }) => {
+        const canDelete = canManageEmployees && ['EMPLOYEE', 'MANAGER'].includes(row.original.user.role);
+
+        return (
+          <div className="flex items-center gap-2">
+            <Link href={`/team/${row.original.id}`} className="text-sm font-medium text-accent hover:underline">
+              Voir
+            </Link>
+            {canDelete && (
+              <ConfirmDialog
+                title="Supprimer la ressource"
+                description={`Supprimer ${row.original.user.firstName} ${row.original.user.lastName} ? Le compte sera desactive et retire des affectations actives.`}
+                confirmLabel="Supprimer"
+                onConfirm={() => handleDelete(row.original)}
+                trigger={
+                  <button type="button" title="Supprimer" className="flex h-7 w-7 items-center justify-center rounded-md text-dangerText hover:bg-dangerBg">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                }
+              />
+            )}
+          </div>
+        );
+      },
     },
   ];
 
@@ -263,6 +294,12 @@ export default function TeamPage() {
             </div>
           ) : undefined}
         />
+
+        {actionError && (
+          <div className="rounded-lg border border-dangerBorder bg-dangerBg px-4 py-3 text-sm text-dangerText">
+            {actionError}
+          </div>
+        )}
 
         <div className="grid gap-3 rounded-xl border border-borderSoft bg-surface p-4 shadow-card md:grid-cols-3">
           <FormField

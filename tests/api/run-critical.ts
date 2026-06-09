@@ -7,7 +7,7 @@ const API_URL = process.env.API_URL ?? 'http://127.0.0.1:4000/api';
 const apiPort = new URL(API_URL).port || '4000';
 const rootDir = process.cwd();
 const pnpmBin = join(rootDir, 'node_modules', '.bin', process.platform === 'win32' ? 'pnpm.CMD' : 'pnpm');
-const apiEntry = join(rootDir, 'apps', 'api', 'dist', 'main.js');
+const apiEntry = join(rootDir, 'backend', 'dist', 'main.js');
 
 async function apiAvailable() {
   const controller = new AbortController();
