@@ -55,7 +55,7 @@ const fallbackJobTitleOptions = [
 // ─── Modal Nouvel Employé ────────────────────────────────────────────────────
 
 const emptyForm = {
-  firstName: '', lastName: '', email: '', password: 'Password123!',
+  firstName: '', lastName: '', email: '',
   phone: '', role: 'EMPLOYEE', employeeNumber: '', jobTitle: '',
   contractType: 'CDI', hireDate: '', annualLeaveBalance: 18, hourlyRate: 85,
 };
@@ -121,7 +121,6 @@ function NewEmployeeModal({ jobTitleOptions, onCreated }: { jobTitleOptions: str
               {f('lastName',       'Nom')}
               {f('email',          'Email',   'email')}
               {f('phone',          'Téléphone')}
-              {f('password',       'Mot de passe')}
               {f('employeeNumber', 'Matricule')}
               <SelectField
                 label="Poste"

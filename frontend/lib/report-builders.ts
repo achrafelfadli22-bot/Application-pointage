@@ -25,7 +25,7 @@ function statusLabel(s: string): string {
     REJECTED: 'Refusé', REOPENED: 'Rouvert', CANCELLED: 'Annulé',
     ACTIVE: 'Actif', INACTIVE: 'Inactif',
   };
-  return s === 'N1_APPROVED' ? 'Validee N+1' : map[s] ?? s;
+  return s === 'N1_APPROVED' ? 'Pre-approuvee' : map[s] ?? s;
 }
 
 function isoDay(value: string | Date | null | undefined): string {
@@ -70,6 +70,10 @@ function fullName(user: any) {
 function numberValue(value: unknown) {
   const n = Number(value ?? 0);
   return Number.isFinite(n) ? n : 0;
+}
+
+function metricValue(row: any, key: string, fallback = 0) {
+  return numberValue(row?.metrics?.[key] ?? fallback);
 }
 
 function joinLabel(...parts: Array<string | null | undefined>) {
@@ -218,7 +222,7 @@ export function buildHoursByEmployeeSheet(data: any[]): ExcelSheet[] {
   }];
 }
 
-// ─── Timesheets ───────────────────────────────────────────────────────────────
+// ─── Feuilles de temps ────────────────────────────────────────────────────────
 
 export function buildTimesheetsSheet(data: any[]): ExcelSheet[] {
   const dateKeys = Array.from(
@@ -258,6 +262,12 @@ export function buildTimesheetsSheet(data: any[]): ExcelSheet[] {
       0,
     );
 
+    const normalHours = metricValue(ts, 'normalHours', totalHours);
+    const overtimeHours = metricValue(ts, 'overtimeHours', 0);
+    const billableHours = metricValue(ts, 'billableHours', totalHours);
+    const nonBillableHours = metricValue(ts, 'nonBillableHours', 0);
+    const leaveDays = metricValue(ts, 'leaveDays', 0);
+    const publicHolidays = metricValue(ts, 'publicHolidays', 0);
     const previous = summaryByUser.get(userKey);
     summaryByUser.set(userKey, {
       employe: fullName(ts.user),
@@ -268,6 +278,12 @@ export function buildTimesheetsSheet(data: any[]): ExcelSheet[] {
       statuts: previous?.statuts ? `${previous.statuts}, ${statusLabel(ts.status ?? '')}` : statusLabel(ts.status ?? ''),
       timesheets: numberValue(previous?.timesheets) + 1,
       heures: Number((numberValue(previous?.heures) + totalHours).toFixed(2)),
+      normalHours: Number((numberValue(previous?.normalHours) + normalHours).toFixed(2)),
+      overtimeHours: Number((numberValue(previous?.overtimeHours) + overtimeHours).toFixed(2)),
+      billableHours: Number((numberValue(previous?.billableHours) + billableHours).toFixed(2)),
+      nonBillableHours: Number((numberValue(previous?.nonBillableHours) + nonBillableHours).toFixed(2)),
+      leaveDays: Number((numberValue(previous?.leaveDays) + leaveDays).toFixed(2)),
+      publicHolidays: Number((numberValue(previous?.publicHolidays) + publicHolidays).toFixed(2)),
     });
   }
 
@@ -285,14 +301,26 @@ export function buildTimesheetsSheet(data: any[]): ExcelSheet[] {
         { header: 'Debut', key: 'debut', width: 14 },
         { header: 'Fin', key: 'fin', width: 14 },
         { header: 'Statuts', key: 'statuts', width: 24 },
-        { header: 'Nb timesheets', key: 'timesheets', width: 14, type: 'number' },
+        { header: 'Nb feuilles', key: 'timesheets', width: 14, type: 'number' },
         { header: 'Total', key: 'heures', width: 12, type: 'number', style: 'total' },
+        { header: 'Heures normales', key: 'normalHours', width: 16, type: 'number' },
+        { header: 'Heures sup.', key: 'overtimeHours', width: 14, type: 'number' },
+        { header: 'Facturable', key: 'billableHours', width: 14, type: 'number' },
+        { header: 'Non facturable', key: 'nonBillableHours', width: 16, type: 'number' },
+        { header: 'Conges approuves (j)', key: 'leaveDays', width: 20, type: 'number' },
+        { header: 'Jours feries', key: 'publicHolidays', width: 14, type: 'number' },
       ],
       rows: summaryRows,
       totals: {
         employe: 'TOTAL',
         timesheets: summaryRows.reduce((sum, row) => sum + numberValue(row.timesheets), 0),
         heures: Number(summaryRows.reduce((sum, row) => sum + numberValue(row.heures), 0).toFixed(2)),
+        normalHours: Number(summaryRows.reduce((sum, row) => sum + numberValue(row.normalHours), 0).toFixed(2)),
+        overtimeHours: Number(summaryRows.reduce((sum, row) => sum + numberValue(row.overtimeHours), 0).toFixed(2)),
+        billableHours: Number(summaryRows.reduce((sum, row) => sum + numberValue(row.billableHours), 0).toFixed(2)),
+        nonBillableHours: Number(summaryRows.reduce((sum, row) => sum + numberValue(row.nonBillableHours), 0).toFixed(2)),
+        leaveDays: Number(summaryRows.reduce((sum, row) => sum + numberValue(row.leaveDays), 0).toFixed(2)),
+        publicHolidays: Number(summaryRows.reduce((sum, row) => sum + numberValue(row.publicHolidays), 0).toFixed(2)),
       },
     },
   ];
@@ -376,6 +404,7 @@ export function buildTimesheetsSheet(data: any[]): ExcelSheet[] {
   return sheets;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function buildTimesheetsSheetLegacy(data: any[]): ExcelSheet[] {
   // Feuille 1 : résumé
   const summaryRows = data.map((ts) => ({
@@ -411,7 +440,7 @@ function buildTimesheetsSheetLegacy(data: any[]): ExcelSheet[] {
 
   return [
     {
-      name: 'Timesheets',
+      name: 'Feuilles de temps',
       columns: [
         { header: 'Employé',        key: 'employe',  width: 24 },
         { header: 'Email',          key: 'email',    width: 28 },
@@ -423,7 +452,7 @@ function buildTimesheetsSheetLegacy(data: any[]): ExcelSheet[] {
       ],
       rows: summaryRows,
       totals: {
-        employe: `${summaryRows.length} timesheet(s)`,
+        employe: `${summaryRows.length} feuille(s)`,
         heures:  Number(summaryRows.reduce((s, r) => s + (r.heures as number), 0).toFixed(2)),
       },
     },

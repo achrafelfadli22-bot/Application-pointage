@@ -297,6 +297,8 @@ export const api = {
   markNotificationRead: (id: string) =>
     apiRequest(`/notifications/${id}/read`, { method: 'PATCH' }),
   tenants: () => apiRequest('/tenants'),
+  createUser: (data: Record<string, unknown>) =>
+    apiRequest('/users', { method: 'POST', body: JSON.stringify(data) }),
   suspendTenant: (id: string) =>
     apiRequest(`/tenants/${id}/suspend`, { method: 'PATCH' }),
   reactivateTenant: (id: string, status: 'ACTIVE' | 'TRIAL' = 'ACTIVE') =>
@@ -321,4 +323,8 @@ export const api = {
     apiRequest('/auth/reset-password', { method: 'POST', body: JSON.stringify({ token, password }) }),
   markAllNotificationsRead: () =>
     apiRequest('/notifications/read-all', { method: 'PATCH' }),
+  updateProfile: (data: { firstName: string; lastName: string; phone?: string }) =>
+    apiRequest('/auth/profile', { method: 'PUT', body: JSON.stringify(data) }),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    apiRequest('/auth/change-password', { method: 'POST', body: JSON.stringify(data) }),
 };

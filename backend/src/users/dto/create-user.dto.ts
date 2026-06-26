@@ -7,7 +7,7 @@ export class CreateUserDto {
   @IsEmail()
   email!: string;
 
-  @ApiProperty({ default: 'Password123!' })
+  @ApiProperty({ example: 'Str0ng-temporary-password!' })
   @IsString()
   @MinLength(8)
   password!: string;
@@ -24,6 +24,11 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({ description: 'Required when a SUPER_ADMIN creates a tenant-scoped account.' })
+  @IsOptional()
+  @IsString()
+  tenantId?: string;
 
   @ApiProperty({ enum: UserRole })
   @IsEnum(UserRole)

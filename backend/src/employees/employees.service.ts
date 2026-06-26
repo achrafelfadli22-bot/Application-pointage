@@ -2,11 +2,13 @@ import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { Prisma, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuthContextCacheService } from '../common/auth-context-cache.service';
 import { HierarchyService } from '../common/hierarchy.service';
 import { assertStrongPassword } from '../common/password-policy';
 import { CurrentUserContext } from '../common/types';
+import { MailService } from '../mail/mail.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { EmployeesRepository } from './employees.repository';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
@@ -26,6 +28,7 @@ export class EmployeesService {
     private readonly config: ConfigService,
     private readonly hierarchy: HierarchyService,
     private readonly authContextCache: AuthContextCacheService,
+    private readonly mail: MailService,
   ) {}
 
   async findAll(user: CurrentUserContext, filters: EmployeeFilters) {
@@ -112,7 +115,8 @@ export class EmployeesService {
     }
     this.assertTenantUserRole(dto.role);
 
-    const rawPassword = dto.password ?? 'Password123!';
+    const passwordSetupRequired = !dto.password;
+    const rawPassword = dto.password ?? this.generateTemporaryPassword();
     assertStrongPassword(rawPassword, this.config);
     const passwordHash = await bcrypt.hash(rawPassword, 12);
 
@@ -144,6 +148,10 @@ export class EmployeesService {
       entityId: employee.id,
       metadata: { employeeNumber: employee.employeeNumber },
     });
+
+    if (passwordSetupRequired) {
+      await this.sendPasswordSetupLink(employee.user.id, employee.user.email, `${employee.user.firstName} ${employee.user.lastName}`);
+    }
 
     return employee;
   }
@@ -241,5 +249,22 @@ export class EmployeesService {
     if (role === UserRole.SUPER_ADMIN) {
       throw new ForbiddenException('SUPER_ADMIN cannot be assigned to a tenant employee');
     }
+  }
+
+  private generateTemporaryPassword() {
+    return `${crypto.randomBytes(24).toString('base64url')}Aa1!`;
+  }
+
+  private async sendPasswordSetupLink(userId: string, email: string, fullName: string) {
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const webOrigin = this.config.get<string>('WEB_ORIGIN') ?? 'http://localhost:3000';
+    const resetUrl = `${webOrigin}/reset-password?token=${rawToken}_${userId}`;
+
+    await this.repository.updateUserPasswordReset(userId, {
+      passwordResetToken: await bcrypt.hash(rawToken, 10),
+      passwordResetExpiry: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    });
+
+    void this.mail.sendPasswordReset(email, fullName, resetUrl);
   }
 }

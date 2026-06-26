@@ -4,6 +4,7 @@ const AUTH_COOKIE_NAME = 'pointage360.auth';
 
 const PUBLIC_PATHS = new Set([
   '/',
+  '/pointage360',
   '/login',
   '/forgot-password',
   '/reset-password',
@@ -12,6 +13,7 @@ const PUBLIC_PATHS = new Set([
 
 function isPublicPath(pathname: string) {
   if (PUBLIC_PATHS.has(pathname)) return true;
+  if (pathname.startsWith('/pointage360/')) return true;
   if (pathname.startsWith('/reset-password/')) return true;
   return false;
 }

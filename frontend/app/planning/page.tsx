@@ -35,6 +35,11 @@ type Employee = {
   user: { id: string; firstName: string; lastName: string; role: string };
 };
 
+type AttendanceSettings = {
+  workDayStartTime: string;
+  lateToleranceMinutes: number;
+};
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function isoDate(d: Date) {
@@ -55,6 +60,13 @@ function addDays(d: Date, n: number): Date {
   const copy = new Date(d);
   copy.setUTCDate(copy.getUTCDate() + n);
   return copy;
+}
+
+function minutesFromTime(value: string): number {
+  const [hourRaw = '8', minuteRaw = '0'] = value.split(':');
+  const hour = Number(hourRaw);
+  const minute = Number(minuteRaw);
+  return (Number.isFinite(hour) ? hour : 8) * 60 + (Number.isFinite(minute) ? minute : 0);
 }
 
 type DayStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'LEAVE' | 'WEEKEND' | 'FUTURE';
@@ -102,8 +114,14 @@ export default function PlanningPage() {
     [],
   );
 
+  const { data: attendanceSettings } = useApiData<AttendanceSettings>(
+    () => api.settingsAttendance() as Promise<AttendanceSettings>,
+    { workDayStartTime: '08:00', lateToleranceMinutes: 15 },
+  );
+
   const today   = new Date();
   const todayIso = isoDate(today);
+  const lateThresholdMinutes = minutesFromTime(attendanceSettings.workDayStartTime) + attendanceSettings.lateToleranceMinutes;
 
   // Determine cell status for each employee × day
   function getCellStatus(emp: Employee, day: Date): { status: DayStatus; hours?: string; leaveType?: string } {
@@ -130,9 +148,9 @@ export default function PlanningPage() {
     );
     if (!punch) return { status: 'ABSENT' };
 
-    // Determine late (check-in after 08:15)
+    // Determine late from tenant attendance settings.
     const isLate = punch.checkInAt
-      ? new Date(punch.checkInAt).getUTCHours() * 60 + new Date(punch.checkInAt).getUTCMinutes() > 8 * 60 + 15
+      ? new Date(punch.checkInAt).getUTCHours() * 60 + new Date(punch.checkInAt).getUTCMinutes() > lateThresholdMinutes
       : false;
 
     const hours = punch.durationMinutes
@@ -222,7 +240,7 @@ export default function PlanningPage() {
 
         {/* Grille */}
         <div className="overflow-x-auto rounded-xl border border-borderSoft bg-surface shadow-card">
-          <table className="w-full border-collapse text-sm" style={{ minWidth: '700px' }}>
+          <table className="w-full min-w-[520px] border-collapse text-sm sm:min-w-[700px]">
             <thead>
               <tr className="border-b border-borderSoft bg-grayCard">
                 {/* Col employé */}
@@ -238,7 +256,7 @@ export default function PlanningPage() {
                       key={iso}
                       className={`px-2 py-3 text-center text-xs font-semibold uppercase tracking-wide ${
                         isWE ? 'text-hintText' : isToday ? 'text-accentText' : 'text-mutedText'
-                      }`}
+                      } ${isWE ? 'hidden sm:table-cell' : ''}`}
                     >
                       <div className={isToday ? 'font-bold' : ''}>{DAYS_FR[i]}</div>
                       <div className={`mt-0.5 text-[11px] ${isToday ? 'font-bold text-accentText' : 'text-hintText'}`}>
@@ -276,10 +294,11 @@ export default function PlanningPage() {
                     {/* Jours */}
                     {weekDays.map((day) => {
                       const iso = isoDate(day);
+                      const isWE = day.getUTCDay() === 0 || day.getUTCDay() === 6;
                       const { status, hours, leaveType } = getCellStatus(emp, day);
                       const style = getStatusStyle(status);
                       return (
-                        <td key={iso} className="px-1.5 py-1.5 text-center">
+                        <td key={iso} className={`px-1.5 py-1.5 text-center ${isWE ? 'hidden sm:table-cell' : ''}`}>
                           {status === 'WEEKEND' || status === 'FUTURE' ? (
                             <div className={`mx-auto flex h-10 w-full max-w-[70px] items-center justify-center rounded-md border text-[10px] ${style.bg} ${style.text}`}>
                               {status === 'WEEKEND' ? '—' : ''}

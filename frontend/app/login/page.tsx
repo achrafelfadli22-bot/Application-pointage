@@ -33,8 +33,8 @@ export default function LoginPage() {
   const form = useForm<LoginForm>({
     resolver: zodResolver(schema),
     defaultValues: {
-      email: 'a.elyoussefi@futura-expert.com',
-      password: 'Password123!',
+      email: '',
+      password: '',
     },
   });
 

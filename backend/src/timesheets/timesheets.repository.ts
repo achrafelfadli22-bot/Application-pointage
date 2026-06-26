@@ -47,4 +47,43 @@ export class TimesheetsRepository {
   createLine(tx: Prisma.TransactionClient, args: Prisma.TimesheetLineCreateArgs) {
     return tx.timesheetLine.create(args);
   }
+
+  findCalendarHolidays(tenantId: string, startDate: Date, endDate: Date) {
+    return this.prisma.holiday.findMany({
+      where: {
+        tenantId,
+        date: { gte: startDate, lte: endDate },
+      },
+      select: {
+        id: true,
+        name: true,
+        date: true,
+        country: true,
+        isRecurring: true,
+      },
+      orderBy: { date: 'asc' },
+    });
+  }
+
+  findApprovedLeavesForUser(tenantId: string, userId: string, startDate: Date, endDate: Date) {
+    return this.prisma.leaveRequest.findMany({
+      where: {
+        tenantId,
+        userId,
+        status: 'APPROVED',
+        startDate: { lte: endDate },
+        endDate: { gte: startDate },
+      },
+      select: {
+        id: true,
+        startDate: true,
+        endDate: true,
+        durationDays: true,
+        startHalfDay: true,
+        endHalfDay: true,
+        leaveType: { select: { id: true, code: true, name: true, isPaid: true } },
+      },
+      orderBy: { startDate: 'asc' },
+    });
+  }
 }

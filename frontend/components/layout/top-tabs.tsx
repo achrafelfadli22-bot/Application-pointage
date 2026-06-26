@@ -5,10 +5,10 @@ import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 
 const tabs = [
-  { label: 'Timesheet', href: '/timesheets' },
-  { label: 'Time Off', href: '/time-off' },
+  { label: 'Feuilles de temps', href: '/timesheets' },
+  { label: 'Congés', href: '/time-off' },
   { label: 'Pointage', href: '/attendance' },
-  { label: 'Reports', href: '/reports' },
+  { label: 'Rapports', href: '/reports' },
 ];
 
 export function TopTabs() {

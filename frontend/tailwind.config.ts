@@ -47,7 +47,7 @@ const config: Config = {
         infoBorder: '#6AADD5',
       },
       fontFamily: {
-        sans: ['Calibri', 'Arial', 'Helvetica', 'sans-serif'],
+        sans: ['system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'sans-serif'],
       },
       borderRadius: {
         sm: '4px',

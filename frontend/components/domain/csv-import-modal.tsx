@@ -16,8 +16,8 @@ const CSV_HEADERS = [
 
 const CSV_TEMPLATE = [
   CSV_HEADERS.join(','),
-  'Omar,Mansouri,omar.mansouri@example.com,+212600000001,EMP-001,Maçon,EMPLOYEE,CDI,2024-01-15,18,85,Password123!',
-  'Fatima,Zahraoui,fatima.zahraoui@example.com,+212600000002,EMP-002,Electricien,EMPLOYEE,CDD,2024-03-01,18,90,Password123!',
+  'Omar,Mansouri,omar.mansouri@example.com,+212600000001,EMP-001,Maçon,EMPLOYEE,CDI,2024-01-15,18,85,',
+  'Fatima,Zahraoui,fatima.zahraoui@example.com,+212600000002,EMP-002,Electricien,EMPLOYEE,CDD,2024-03-01,18,90,',
 ].join('\n');
 
 function downloadTemplate() {
@@ -126,12 +126,15 @@ export function CsvImportModal({ onImported }: CsvImportModalProps) {
     const res: ImportResult[] = [];
     for (const row of validRows) {
       try {
-        await api.createEmployee({
+        const payload = {
           ...row,
           annualLeaveBalance: Number(row.annualLeaveBalance) || 18,
           hourlyRate:         Number(row.hourlyRate)         || 0,
-          password:           row.password || 'Password123!',
-        });
+        };
+        if (row.password) {
+          Object.assign(payload, { password: row.password });
+        }
+        await api.createEmployee(payload);
         res.push({ row, success: true });
       } catch (e) {
         res.push({ row, success: false, error: e instanceof Error ? e.message : 'Erreur' });

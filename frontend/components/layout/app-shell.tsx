@@ -6,8 +6,18 @@ import { Sidebar } from './sidebar';
 import { TopBar } from './top-bar';
 import { MobileDrawer } from './mobile-drawer';
 import { tokenStore } from '@/lib/api-client';
+import { PageSkeleton } from '@/components/ui/skeleton';
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  loading = false,
+  skeletonProps,
+}: {
+  children: React.ReactNode;
+  /** When true, replaces page content with an animated skeleton */
+  loading?: boolean;
+  skeletonProps?: React.ComponentProps<typeof PageSkeleton>;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const [ready, setReady] = useState(false);
@@ -45,7 +55,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex min-w-0 flex-1 flex-col">
         <TopBar onMenuOpen={() => setMobileMenuOpen(true)} />
         <main className="flex-1 p-6 lg:p-8">
-          {children}
+          {loading ? <PageSkeleton {...skeletonProps} /> : children}
         </main>
       </div>
     </div>

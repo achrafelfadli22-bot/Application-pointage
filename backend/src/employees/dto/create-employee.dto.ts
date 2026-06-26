@@ -16,7 +16,7 @@ export class CreateEmployeeDto {
   @IsEmail()
   email!: string;
 
-  @ApiPropertyOptional({ default: 'Password123!' })
+  @ApiPropertyOptional({ description: 'Optional. When omitted, a secure temporary password is generated and a setup link is sent.' })
   @IsOptional()
   @IsString()
   @MinLength(8)

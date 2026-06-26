@@ -145,16 +145,7 @@ export class HierarchyService {
           where: { tenantId, id: { in: ids }, deletedAt: null },
           select: { managerId: true, project: { select: { projectManagerId: true } } },
         })
-      : (
-          await this.prisma.siteAssignment.findMany({
-            where: {
-              tenantId,
-              userId: targetUserId,
-              ...this.activeAssignmentWhere(),
-            },
-            select: { site: { select: { managerId: true, project: { select: { projectManagerId: true } } } } },
-          })
-        ).map((assignment) => assignment.site);
+      : await this.defaultApprovalSitesFor(tenantId, targetUserId);
 
     const n1Ids = new Set<string>();
     const n2Ids = new Set<string>();
@@ -177,6 +168,30 @@ export class HierarchyService {
     }
 
     return { n1Ids, n2Ids };
+  }
+
+  private async defaultApprovalSitesFor(tenantId: string, targetUserId: string) {
+    const [assignments, employee] = await Promise.all([
+      this.prisma.siteAssignment.findMany({
+        where: {
+          tenantId,
+          userId: targetUserId,
+          ...this.activeAssignmentWhere(),
+        },
+        select: { site: { select: { managerId: true, project: { select: { projectManagerId: true } } } } },
+      }),
+      this.prisma.employeeProfile.findFirst({
+        where: {
+          tenantId,
+          userId: targetUserId,
+          user: { deletedAt: null },
+          mainSite: { deletedAt: null },
+        },
+        select: { mainSite: { select: { managerId: true, project: { select: { projectManagerId: true } } } } },
+      }),
+    ]);
+
+    return [...assignments.map((assignment) => assignment.site), ...(employee?.mainSite ? [employee.mainSite] : [])];
   }
 
   activeAssignmentWhere(): Prisma.SiteAssignmentWhereInput {

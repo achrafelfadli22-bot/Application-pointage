@@ -16,6 +16,7 @@ import { SecondaryButton, DangerButton } from '@/components/ui/buttons';
 import { DateField, SelectField } from '@/components/ui/form-fields';
 import { api, tokenStore } from '@/lib/api-client';
 import { useApiData } from '@/lib/use-api-data';
+import { fmtDate, fmtTime, fmtDuration } from '@/lib/formatters';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -39,18 +40,6 @@ type Punch = {
 const WORK_LOCATION_LABELS: Record<string, string> = {
   SITE: 'Chantier', OFFICE: 'Bureau', HOME: 'Domicile', TRAVEL: 'Déplacement',
 };
-
-function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('fr-FR', { weekday: 'short', day: '2-digit', month: 'short' });
-}
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-}
-function fmtDuration(min: number | null) {
-  if (!min) return '—';
-  const h = Math.floor(min / 60), m = min % 60;
-  return m > 0 ? `${h}h${String(m).padStart(2, '0')}` : `${h}h`;
-}
 
 const MANAGER_ROLES = ['RESOURCE_MANAGER', 'HR', 'PROJECT_MANAGER', 'MANAGER'];
 
@@ -217,7 +206,7 @@ export default function AttendancePage() {
   // ── Rendu ─────────────────────────────────────────────────────────────────
 
   return (
-    <AppShell>
+    <AppShell loading={loading} skeletonProps={{ kpis: 4, tableRows: 8, tableCols: isManager ? 9 : 8 }}>
       <div className="grid gap-5">
 
         <PageHeader

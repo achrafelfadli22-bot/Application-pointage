@@ -1,15 +1,17 @@
 import {
   BarChart3,
-  Building2,
   CalendarClock,
   CalendarRange,
   ClipboardList,
   Clock4,
   CreditCard,
+  FolderKanban,
+  HardHat,
   LayoutDashboard,
   Settings,
   Shield,
   ShieldAlert,
+  UserCircle,
   Users,
   type LucideIcon,
 } from 'lucide-react';
@@ -27,16 +29,19 @@ export const NAV_ITEMS: readonly NavItem[] = [
   // ── Opérationnel ────────────────────────────────────────────────────────────
   { label: 'Tableau de bord',   href: '/dashboard',            icon: LayoutDashboard, roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
   { label: 'Pointage',          href: '/attendance',            icon: Clock4,          roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
-  { label: 'Timesheets',        href: '/timesheets',            icon: ClipboardList,   roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
+  { label: 'Feuilles de temps', href: '/timesheets',            icon: ClipboardList,   roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
   { label: 'Congés',            href: '/time-off',              icon: CalendarClock,   roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'], exact: true },
   { label: 'Demandes de congé', href: '/time-off/requests',     icon: ClipboardList,   roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
 
   // ── RH & Opérations ─────────────────────────────────────────────────────────
   { label: 'Mon équipe',        href: '/team',                  icon: Users,           roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'],  section: 'RH & Opérations' },
   { label: 'Planning équipe',   href: '/planning',              icon: CalendarRange,   roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
-  { label: 'Projets',           href: '/projects',              icon: Building2,       roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
-  { label: 'Chantiers',         href: '/sites',                 icon: Building2,       roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
+  { label: 'Projets',           href: '/projects',              icon: FolderKanban,    roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
+  { label: 'Chantiers',         href: '/sites',                 icon: HardHat,         roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
   { label: 'Rapports',          href: '/reports',               icon: BarChart3,       roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
+
+  // ── Compte ──────────────────────────────────────────────────────────────────
+  { label: 'Mon profil',         href: '/profile',               icon: UserCircle,      roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER', 'SUPER_ADMIN'], section: 'Compte' },
 
   // ── Administration société ───────────────────────────────────────────────────
   { label: 'Paramètres',        href: '/settings',              icon: Settings,        roles: ['RESOURCE_MANAGER', 'HR'] },

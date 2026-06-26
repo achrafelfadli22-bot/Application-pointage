@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import { TenantStatus } from '@prisma/client';
+import { TenantStatus, UserRole } from '@prisma/client';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { AuthContextCacheService } from '../common/auth-context-cache.service';
 import { CurrentUserContext } from '../common/types';
@@ -24,6 +24,11 @@ export class TenantsService {
       orderBy: { createdAt: 'desc' },
       include: {
         subscriptionPlan: true,
+        users: {
+          where: { role: UserRole.RESOURCE_MANAGER, deletedAt: null },
+          select: { id: true, email: true, firstName: true, lastName: true, status: true },
+          orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+        },
         _count: { select: { users: true, sites: true } },
       },
     });

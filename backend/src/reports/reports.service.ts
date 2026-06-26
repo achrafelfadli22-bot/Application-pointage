@@ -907,7 +907,7 @@ export class ReportsService {
   async timesheets(user: CurrentUserContext, filters: ReportFilterDto) {
     const take = Math.min(filters.take ?? 100, 500);
     const skip = filters.skip ?? 0;
-    return this.prisma.timesheet.findMany({
+    const timesheets = await this.prisma.timesheet.findMany({
       where: {
         ...this.tenantWhere(user),
         userId: await this.userIdFilter(user, filters.userId),
@@ -935,6 +935,8 @@ export class ReportsService {
       take,
       skip,
     });
+
+    return this.withTimesheetMetrics(timesheets);
   }
 
   async leave(user: CurrentUserContext, filters: ReportFilterDto) {
@@ -1006,6 +1008,164 @@ export class ReportsService {
 
   private tenantWhere(user: CurrentUserContext): Record<string, unknown> {
     return user.role === UserRole.SUPER_ADMIN ? {} : { tenantId: user.tenantId ?? '__missing__' };
+  }
+
+  private async withTimesheetMetrics(timesheets: Array<{
+    id: string;
+    tenantId: string;
+    userId: string;
+    periodStart: Date;
+    periodEnd: Date;
+    lines: Array<{
+      billingType: string;
+      entries: Array<{ entryDate: Date; hours: unknown }>;
+    }>;
+  }>) {
+    if (!timesheets.length) return timesheets;
+
+    const tenantIds = [...new Set(timesheets.map((timesheet) => timesheet.tenantId))];
+    const userIds = [...new Set(timesheets.map((timesheet) => timesheet.userId))];
+    const minStart = new Date(Math.min(...timesheets.map((timesheet) => timesheet.periodStart.getTime())));
+    const maxEnd = new Date(Math.max(...timesheets.map((timesheet) => timesheet.periodEnd.getTime())));
+
+    const [settings, leaves, holidays] = await Promise.all([
+      this.prisma.tenantSettings.findMany({
+        where: { tenantId: { in: tenantIds } },
+        select: { tenantId: true, overtimeTriggerHours: true },
+      }),
+      this.prisma.leaveRequest.findMany({
+        where: {
+          tenantId: { in: tenantIds },
+          userId: { in: userIds },
+          status: 'APPROVED',
+          startDate: { lte: maxEnd },
+          endDate: { gte: minStart },
+        },
+        select: {
+          tenantId: true,
+          userId: true,
+          startDate: true,
+          endDate: true,
+          durationDays: true,
+          leaveType: { select: { isPaid: true } },
+        },
+      }),
+      this.prisma.holiday.findMany({
+        where: {
+          tenantId: { in: tenantIds },
+          date: { gte: minStart, lte: maxEnd },
+        },
+        select: { tenantId: true, date: true },
+      }),
+    ]);
+
+    const overtimeByTenant = new Map(settings.map((item) => [item.tenantId, item.overtimeTriggerHours || 8]));
+
+    return timesheets.map((timesheet) => {
+      const overtimeTriggerHours = overtimeByTenant.get(timesheet.tenantId) ?? 8;
+      const metrics = this.calculateTimesheetMetrics({
+        timesheet,
+        overtimeTriggerHours,
+        leaves: leaves.filter(
+          (leave) =>
+            leave.tenantId === timesheet.tenantId &&
+            leave.userId === timesheet.userId &&
+            leave.startDate <= timesheet.periodEnd &&
+            leave.endDate >= timesheet.periodStart,
+        ),
+        holidays: holidays.filter(
+          (holiday) =>
+            holiday.tenantId === timesheet.tenantId &&
+            holiday.date >= timesheet.periodStart &&
+            holiday.date <= timesheet.periodEnd,
+        ),
+      });
+
+      return { ...timesheet, metrics };
+    });
+  }
+
+  private calculateTimesheetMetrics(input: {
+    timesheet: {
+      lines: Array<{
+        billingType: string;
+        entries: Array<{ entryDate: Date; hours: unknown }>;
+      }>;
+      periodStart: Date;
+      periodEnd: Date;
+    };
+    overtimeTriggerHours: number;
+    leaves: Array<{ startDate: Date; endDate: Date; durationDays: unknown; leaveType: { isPaid: boolean } }>;
+    holidays: Array<{ date: Date }>;
+  }) {
+    const dayTotals = new Map<string, number>();
+    let totalHours = 0;
+    let billableHours = 0;
+    let nonBillableHours = 0;
+
+    for (const line of input.timesheet.lines) {
+      for (const entry of line.entries ?? []) {
+        const hours = Number(entry.hours ?? 0);
+        const dayKey = entry.entryDate.toISOString().slice(0, 10);
+        dayTotals.set(dayKey, Number(((dayTotals.get(dayKey) ?? 0) + hours).toFixed(2)));
+        totalHours += hours;
+        if (line.billingType === 'BILLABLE') billableHours += hours;
+        else nonBillableHours += hours;
+      }
+    }
+
+    let normalHours = 0;
+    let overtimeHours = 0;
+    for (const dayHours of dayTotals.values()) {
+      const normal = input.overtimeTriggerHours > 0 ? Math.min(dayHours, input.overtimeTriggerHours) : dayHours;
+      normalHours += normal;
+      overtimeHours += Math.max(0, dayHours - normal);
+    }
+
+    const leaveDays = input.leaves.reduce((sum, leave) => {
+      const overlapDays = this.overlapCalendarDays(
+        input.timesheet.periodStart,
+        input.timesheet.periodEnd,
+        leave.startDate,
+        leave.endDate,
+      );
+      return sum + Math.min(Number(leave.durationDays ?? 0), overlapDays);
+    }, 0);
+
+    const paidLeaveDays = input.leaves.reduce((sum, leave) => {
+      if (!leave.leaveType.isPaid) return sum;
+      const overlapDays = this.overlapCalendarDays(
+        input.timesheet.periodStart,
+        input.timesheet.periodEnd,
+        leave.startDate,
+        leave.endDate,
+      );
+      return sum + Math.min(Number(leave.durationDays ?? 0), overlapDays);
+    }, 0);
+
+    return {
+      overtimeTriggerHours: input.overtimeTriggerHours,
+      totalHours: Number(totalHours.toFixed(2)),
+      normalHours: Number(normalHours.toFixed(2)),
+      overtimeHours: Number(overtimeHours.toFixed(2)),
+      billableHours: Number(billableHours.toFixed(2)),
+      nonBillableHours: Number(nonBillableHours.toFixed(2)),
+      leaveDays: Number(leaveDays.toFixed(2)),
+      paidLeaveDays: Number(paidLeaveDays.toFixed(2)),
+      unpaidLeaveDays: Number((leaveDays - paidLeaveDays).toFixed(2)),
+      publicHolidays: input.holidays.length,
+      lineCount: input.timesheet.lines.length,
+    };
+  }
+
+  private overlapCalendarDays(aStart: Date, aEnd: Date, bStart: Date, bEnd: Date) {
+    const start = new Date(Math.max(aStart.getTime(), bStart.getTime()));
+    const end = new Date(Math.min(aEnd.getTime(), bEnd.getTime()));
+    if (end < start) return 0;
+
+    const startUtc = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+    const endUtc = Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), end.getUTCDate());
+    return Math.floor((endUtc - startUtc) / 86_400_000) + 1;
   }
 
   private countWorkingDays(start: Date, end: Date, holidayKeys: Set<string>): number {

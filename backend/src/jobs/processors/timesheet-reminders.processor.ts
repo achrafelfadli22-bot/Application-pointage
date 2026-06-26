@@ -38,7 +38,7 @@ export class TimesheetRemindersProcessor extends WorkerHost {
       select: { id: true, firstName: true, lastName: true },
     });
 
-    // Pour chaque employé, vérifier si une timesheet SUBMITTED/APPROVED existe
+    // Pour chaque employé, vérifier si une feuille de temps SUBMITTED/APPROVED existe
     const start = new Date(periodStart);
     const end = new Date(periodEnd);
 
@@ -69,7 +69,7 @@ export class TimesheetRemindersProcessor extends WorkerHost {
           data: {
             tenantId,
             userId: employee.id,
-            title: 'Timesheet en attente',
+            title: 'Feuille de temps en attente',
             message: `Votre feuille de temps pour la période ${startLabel} – ${endLabel} n'a pas encore été soumise.`,
             type: 'TIMESHEET_REMINDER',
           },

@@ -44,7 +44,7 @@ export class TimesheetsService {
     if (ownerId !== user.userId) {
       const managedUserIds = await this.hierarchy.managedUserIds(user);
       if (managedUserIds && !managedUserIds.includes(ownerId)) {
-        throw new ForbiddenException('Vous pouvez creer des timesheets uniquement pour votre equipe.');
+        throw new ForbiddenException('Vous pouvez creer des feuilles de temps uniquement pour votre equipe.');
       }
     }
 
@@ -78,6 +78,7 @@ export class TimesheetsService {
 
     return {
       ...timesheet,
+      calendarEvents: await this.calendarEventsFor(timesheet),
       permissions: {
         canEdit: await this.canUpdateTimesheet(user, timesheet),
       },
@@ -91,7 +92,7 @@ export class TimesheetsService {
     });
 
     if (!(await this.canUpdateTimesheet(user, timesheet))) {
-      throw new ForbiddenException('Vous ne pouvez pas modifier cette timesheet dans son etat actuel.');
+      throw new ForbiddenException('Vous ne pouvez pas modifier cette feuille de temps dans son etat actuel.');
     }
 
     await this.repository.transaction(async (tx) => {
@@ -170,11 +171,11 @@ export class TimesheetsService {
     });
 
     if (timesheet.userId !== user.userId) {
-      throw new ForbiddenException('Vous pouvez supprimer uniquement vos propres timesheets.');
+      throw new ForbiddenException('Vous pouvez supprimer uniquement vos propres feuilles de temps.');
     }
 
     if (timesheet.status !== TimesheetStatus.DRAFT) {
-      throw new BadRequestException('Seules les timesheets en brouillon peuvent etre supprimees.');
+      throw new BadRequestException('Seules les feuilles de temps en brouillon peuvent etre supprimees.');
     }
 
     await this.repository.delete({ where: { id } });
@@ -225,7 +226,7 @@ export class TimesheetsService {
     if (nextStatus === TimesheetStatus.SUBMITTED && timesheet.userId !== user.userId) {
       const managedUserIds = await this.hierarchy.managedUserIds(user);
       if (managedUserIds && !managedUserIds.includes(timesheet.userId)) {
-        throw new ForbiddenException('Vous pouvez soumettre uniquement les timesheets de votre perimetre.');
+        throw new ForbiddenException('Vous pouvez soumettre uniquement les feuilles de temps de votre perimetre.');
       }
     }
 
@@ -233,7 +234,7 @@ export class TimesheetsService {
       (nextStatus === TimesheetStatus.APPROVED || nextStatus === TimesheetStatus.REJECTED) &&
       timesheet.userId === user.userId
     ) {
-      throw new ForbiddenException('Vous ne pouvez pas valider votre propre timesheet.');
+      throw new ForbiddenException('Vous ne pouvez pas valider votre propre feuille de temps.');
     }
 
     this.assertTransition(timesheet.status, nextStatus);
@@ -284,8 +285,8 @@ export class TimesheetsService {
       await this.notifications.create({
         tenantId: timesheet.tenantId,
         userId: timesheet.userId,
-        title: effectiveStatus === TimesheetStatus.APPROVED ? 'Timesheet approuvee' : 'Timesheet rejetee',
-        message: `Votre timesheet ${timesheet.periodStart.toISOString().slice(0, 10)} - ${timesheet.periodEnd
+        title: effectiveStatus === TimesheetStatus.APPROVED ? 'Feuille de temps approuvee' : 'Feuille de temps rejetee',
+        message: `Votre feuille de temps ${timesheet.periodStart.toISOString().slice(0, 10)} - ${timesheet.periodEnd
           .toISOString()
           .slice(0, 10)} a change de statut.`,
         type: `TIMESHEET_${effectiveStatus}`,
@@ -346,7 +347,7 @@ export class TimesheetsService {
     }
 
     if (user.role === UserRole.RESOURCE_MANAGER) {
-      throw new ForbiddenException('Le Ressource Manager ne valide pas les timesheets.');
+      throw new ForbiddenException('Le Ressource Manager ne valide pas les feuilles de temps.');
     }
 
     const level = await this.hierarchy.approvalLevelFor(
@@ -385,7 +386,7 @@ export class TimesheetsService {
 
   private assertHasWorkEntries(timesheet: { lines: Array<{ entries?: Array<{ hours: unknown }> }> }) {
     if (!timesheet.lines.length) {
-      throw new BadRequestException('La timesheet ne contient aucune ligne. Ajoutez au moins une ligne avant soumission ou validation.');
+      throw new BadRequestException('La feuille de temps ne contient aucune ligne. Ajoutez au moins une ligne avant soumission ou validation.');
     }
 
     const totalHours = timesheet.lines.reduce(
@@ -394,7 +395,7 @@ export class TimesheetsService {
     );
 
     if (totalHours <= 0) {
-      throw new BadRequestException('La timesheet ne contient aucune heure saisie. Ajoutez des heures avant soumission ou validation.');
+      throw new BadRequestException('La feuille de temps ne contient aucune heure saisie. Ajoutez des heures avant soumission ou validation.');
     }
   }
 
@@ -422,6 +423,78 @@ export class TimesheetsService {
     ) {
       throw new BadRequestException('Only approved or rejected timesheets can be reopened');
     }
+  }
+
+  private async calendarEventsFor(timesheet: {
+    tenantId: string;
+    userId: string;
+    periodStart: Date;
+    periodEnd: Date;
+  }) {
+    const [holidays, approvedLeaves] = await Promise.all([
+      this.repository.findCalendarHolidays(timesheet.tenantId, timesheet.periodStart, timesheet.periodEnd),
+      this.repository.findApprovedLeavesForUser(
+        timesheet.tenantId,
+        timesheet.userId,
+        timesheet.periodStart,
+        timesheet.periodEnd,
+      ),
+    ]);
+
+    const holidayEvents = holidays.map((holiday) => ({
+      id: holiday.id,
+      type: 'HOLIDAY' as const,
+      date: this.dateKey(holiday.date),
+      label: holiday.name,
+      country: holiday.country,
+      isRecurring: holiday.isRecurring,
+    }));
+
+    const leaveEvents = approvedLeaves.flatMap((leave) => {
+      const startDate = leave.startDate > timesheet.periodStart ? leave.startDate : timesheet.periodStart;
+      const endDate = leave.endDate < timesheet.periodEnd ? leave.endDate : timesheet.periodEnd;
+
+      return this.dateKeysBetween(startDate, endDate).map((date) => ({
+        id: leave.id,
+        type: 'LEAVE' as const,
+        date,
+        label: leave.leaveType.name,
+        code: leave.leaveType.code,
+        isPaid: leave.leaveType.isPaid,
+        durationDays: Number(leave.durationDays),
+        startHalfDay: leave.startHalfDay,
+        endHalfDay: leave.endHalfDay,
+      }));
+    });
+
+    const byDate: Record<string, Array<(typeof holidayEvents)[number] | (typeof leaveEvents)[number]>> = {};
+    for (const event of [...holidayEvents, ...leaveEvents]) {
+      byDate[event.date] ??= [];
+      byDate[event.date]!.push(event);
+    }
+
+    return {
+      holidays: holidayEvents,
+      approvedLeaves: leaveEvents,
+      byDate,
+    };
+  }
+
+  private dateKey(date: Date) {
+    return date.toISOString().slice(0, 10);
+  }
+
+  private dateKeysBetween(startDate: Date, endDate: Date) {
+    const keys: string[] = [];
+    const current = new Date(Date.UTC(startDate.getUTCFullYear(), startDate.getUTCMonth(), startDate.getUTCDate()));
+    const end = new Date(Date.UTC(endDate.getUTCFullYear(), endDate.getUTCMonth(), endDate.getUTCDate()));
+
+    while (current <= end && keys.length < 370) {
+      keys.push(this.dateKey(current));
+      current.setUTCDate(current.getUTCDate() + 1);
+    }
+
+    return keys;
   }
 
   private async scope(user: CurrentUserContext): Promise<Prisma.TimesheetWhereInput> {

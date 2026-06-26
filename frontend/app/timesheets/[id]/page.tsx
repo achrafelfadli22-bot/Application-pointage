@@ -72,10 +72,10 @@ export default function TimesheetDetailPage() {
         <div>
           <Link href="/timesheets" className="mb-3 inline-flex items-center gap-1 text-sm text-mutedText hover:text-bodyText">
             <ArrowLeft className="h-3.5 w-3.5" />
-            Retour aux timesheets
+            Retour aux feuilles de temps
           </Link>
           <PageHeader
-            title={name ? `Timesheet - ${name}` : 'Detail timesheet'}
+            title={name ? `Feuille de temps - ${name}` : 'Detail feuille de temps'}
             description={period ? `Periode : ${period}` : 'Chargement...'}
           />
         </div>

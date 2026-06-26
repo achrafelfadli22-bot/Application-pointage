@@ -113,14 +113,14 @@ export class MailService {
   async sendTimesheetReminder(to: string, name: string, periodStart: string, periodEnd: string) {
     return this.send({
       to,
-      subject: `Rappel : Timesheet à soumettre — ${periodStart}`,
+      subject: `Rappel : feuille de temps à soumettre — ${periodStart}`,
       html: this.wrap(`
         <h2>Votre feuille de temps est en attente</h2>
         <p>Bonjour <strong>${name}</strong>,</p>
         <p>Votre feuille de temps pour la période du <strong>${periodStart}</strong> au <strong>${periodEnd}</strong>
         n'a pas encore été soumise.</p>
         <p>Merci de la compléter et de la soumettre dès que possible.</p>
-        <p><a href="${this.appUrl()}/timesheets" style="background:#1a2340;color:#fff;padding:10px 20px;text-decoration:none;border-radius:4px;font-weight:bold;">Accéder à mes timesheets</a></p>
+        <p><a href="${this.appUrl()}/timesheets" style="background:#1a2340;color:#fff;padding:10px 20px;text-decoration:none;border-radius:4px;font-weight:bold;">Accéder à mes feuilles de temps</a></p>
       `),
     });
   }

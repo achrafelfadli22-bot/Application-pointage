@@ -61,7 +61,7 @@ const RAPPORTS: RapportDef[] = [
     roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'],
   },
   {
-    nom: 'Timesheets',
+    nom: 'Feuilles de temps',
     endpoint: 'timesheets',          // GET /api/reports/timesheets
     description: 'Récapitulatif des feuilles de temps soumises et approuvées sur la période.',
     categorie: 'operations',
@@ -208,7 +208,16 @@ export default function ReportsPage() {
       const builder = builders[rapport.endpoint];
       if (!builder) throw new Error(`Aucun builder pour "${rapport.endpoint}"`);
 
-      const sheets = builder(Array.isArray(data) ? data : [data]);
+      const rows = Array.isArray(data) ? data : data ? [data] : [];
+      if (rows.length === 0) {
+        throw new Error("Aucune donnee pour cette periode - l'export serait vide.");
+      }
+
+      const sheets = builder(rows);
+      if (!sheets.some((sheet) => sheet.rows.length > 0)) {
+        throw new Error("Aucune donnee exploitable pour cette periode - l'export serait vide.");
+      }
+
       const filename = rapport.endpoint === 'timesheets'
         ? `modele-timesheets-${new Date().toISOString().slice(0, 10)}.xlsx`
         : `${rapport.endpoint}-${new Date().toISOString().slice(0, 10)}.xlsx`;

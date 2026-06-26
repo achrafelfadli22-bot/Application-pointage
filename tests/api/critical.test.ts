@@ -29,10 +29,21 @@ type Timesheet = {
   status: string;
 };
 
+type AttendancePunch = {
+  id: string;
+  status: string;
+};
+
 type EmployeeProfile = {
   id: string;
   userId: string;
   user: { id: string; email: string; role: string; status: string };
+};
+
+type Site = {
+  id: string;
+  code: string;
+  managerId: string | null;
 };
 
 const runOffsetDays = 420 + ((Math.floor(Date.now() / 1000) % 50_000) * 7);
@@ -98,7 +109,7 @@ async function login(email = RESOURCE_MANAGER_EMAIL) {
   });
 }
 
-async function createEmployee(token: string, role: string, index: number) {
+async function createEmployee(token: string, role: string, index: number, overrides: Record<string, unknown> = {}) {
   const normalizedRole = role.toLowerCase().replaceAll('_', '-');
 
   return request<EmployeeProfile>('/employees', {
@@ -116,6 +127,7 @@ async function createEmployee(token: string, role: string, index: number) {
       hireDate: '2026-01-01',
       annualLeaveBalance: 18,
       status: 'ACTIVE',
+      ...overrides,
     },
   });
 }
@@ -168,6 +180,46 @@ export async function runCriticalApiTests() {
     assert.equal(resourceManager.role, 'RESOURCE_MANAGER');
     assert.equal(resourceManager.tenant?.slug, 'futura-expertise');
     assert.equal(resourceManager.user.email, RESOURCE_MANAGER_EMAIL);
+  });
+
+  await withStep('site manager N+1 can approve attendance for main-site team member', async () => {
+    const manager = await createEmployee(resourceManager.accessToken, 'MANAGER', 10);
+    const site = await request<Site>('/sites', {
+      method: 'POST',
+      token: resourceManager.accessToken,
+      body: {
+        code: `CRT-SITE-${runId}`,
+        name: 'Critical N1 attendance site',
+        clientName: 'Futura Expertise',
+        managerId: manager.user.id,
+        status: 'ACTIVE',
+      },
+    });
+
+    const employee = await createEmployee(resourceManager.accessToken, 'EMPLOYEE', 11, { mainSiteId: site.id });
+    const employeeSession = await login(employee.user.email);
+    const managerSession = await login(manager.user.email);
+
+    const punch = await request<AttendancePunch>('/attendance/check-in', {
+      method: 'POST',
+      token: employeeSession.accessToken,
+      body: {
+        workLocation: 'OFFICE',
+        employeeComment: 'Critical N1 approval fallback',
+      },
+    });
+
+    const submitted = await request<AttendancePunch>(`/attendance/${punch.id}/submit`, {
+      method: 'POST',
+      token: employeeSession.accessToken,
+    });
+    assert.equal(submitted.status, 'SUBMITTED');
+
+    const n1Approved = await request<AttendancePunch>(`/attendance/${punch.id}/approve`, {
+      method: 'POST',
+      token: managerSession.accessToken,
+    });
+    assert.equal(n1Approved.status, 'N1_APPROVED');
   });
 
   await withStep('empty timesheets cannot be submitted', async () => {
@@ -233,6 +285,105 @@ export async function runCriticalApiTests() {
       token: resourceManager.accessToken,
       expected: 403,
     });
+  });
+
+  await withStep('timesheets expose approved leave, holidays, and overtime metrics', async () => {
+    const employee = await createEmployee(resourceManager.accessToken, 'EMPLOYEE', 21);
+    const employeeSession = await login(employee.user.email);
+    const start = nextMonday(runOffsetDays + 21);
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+    const leaveDate = new Date(start);
+    leaveDate.setUTCDate(start.getUTCDate() + 1);
+
+    const leaveType = await request<{ id: string }>('/settings/leave-types', {
+      method: 'POST',
+      token: resourceManager.accessToken,
+      body: {
+        code: `CRT-LV-${runId}`,
+        name: `Critical Leave ${runId}`,
+        isPaid: true,
+        annualAllowanceDays: 0,
+        requiresApproval: true,
+        status: 'ACTIVE',
+      },
+    });
+
+    await request('/settings/holidays', {
+      method: 'POST',
+      token: resourceManager.accessToken,
+      body: {
+        name: `Critical Holiday ${runId}`,
+        date: dateOnly(start),
+        country: 'MA',
+        isRecurring: false,
+      },
+    });
+
+    const leave = await request<{ id: string; status: string }>('/leave/requests', {
+      method: 'POST',
+      token: employeeSession.accessToken,
+      body: {
+        leaveTypeId: leaveType.id,
+        startDate: dateOnly(leaveDate),
+        endDate: dateOnly(leaveDate),
+        comment: 'Critical approved leave marker',
+      },
+    });
+    await request(`/leave/requests/${leave.id}/submit`, { method: 'POST', token: employeeSession.accessToken });
+    const approvedLeave = await request<{ status: string }>(`/leave/requests/${leave.id}/approve`, {
+      method: 'POST',
+      token: resourceManager.accessToken,
+    });
+    assert.equal(approvedLeave.status, 'APPROVED');
+
+    const timesheet = await request<Timesheet>('/timesheets', {
+      method: 'POST',
+      token: employeeSession.accessToken,
+      body: {
+        periodStart: dateOnly(start),
+        periodEnd: dateOnly(end),
+      },
+    });
+
+    await request<Timesheet>(`/timesheets/${timesheet.id}`, {
+      method: 'PUT',
+      token: employeeSession.accessToken,
+      body: {
+        lines: [
+          {
+            taskName: 'Overtime report marker',
+            billingType: 'BILLABLE',
+            activity: 'EXECUTION',
+            workLocation: 'OFFICE',
+            placeOfWork: 'Bureau Futura',
+            entries: [{ entryDate: dateOnly(start), hours: 10 }],
+          },
+        ],
+      },
+    });
+
+    const detail = await request<{
+      calendarEvents: {
+        holidays: Array<{ date: string; label: string }>;
+        approvedLeaves: Array<{ date: string; label: string }>;
+      };
+    }>(`/timesheets/${timesheet.id}`, { token: employeeSession.accessToken });
+    assert.ok(detail.calendarEvents.holidays.some((holiday) => holiday.date === dateOnly(start)));
+    assert.ok(detail.calendarEvents.approvedLeaves.some((leaveEvent) => leaveEvent.date === dateOnly(leaveDate)));
+
+    const reportRows = await request<Array<{ id: string; metrics: Record<string, number> }>>(
+      `/reports/timesheets?userId=${employee.user.id}&startDate=${dateOnly(start)}&endDate=${dateOnly(end)}`,
+      { token: resourceManager.accessToken },
+    );
+    const reportRow = reportRows.find((row) => row.id === timesheet.id);
+    assert.ok(reportRow, 'Created timesheet must be present in report');
+    assert.equal(reportRow.metrics.totalHours, 10);
+    assert.equal(reportRow.metrics.normalHours, Math.min(10, reportRow.metrics.overtimeTriggerHours));
+    assert.equal(reportRow.metrics.overtimeHours, Math.max(0, 10 - reportRow.metrics.overtimeTriggerHours));
+    assert.equal(reportRow.metrics.billableHours, 10);
+    assert.ok(reportRow.metrics.leaveDays >= 1);
+    assert.equal(reportRow.metrics.publicHolidays, 1);
   });
 
   await withStep('draft timesheets can be deleted only by their owner', async () => {

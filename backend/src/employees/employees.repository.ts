@@ -72,6 +72,16 @@ export class EmployeesRepository {
     });
   }
 
+  updateUserPasswordReset(
+    userId: string,
+    data: Pick<Prisma.UserUpdateInput, 'passwordResetToken' | 'passwordResetExpiry'>,
+  ) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data,
+    });
+  }
+
   deactivateEmployee(employee: { id: string; tenantId: string; userId: string }, deletedAt: Date) {
     return this.prisma.$transaction(async (tx) => {
       const updatedUser = await tx.user.update({

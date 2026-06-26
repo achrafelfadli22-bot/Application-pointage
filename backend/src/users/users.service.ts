@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
@@ -40,10 +40,11 @@ export class UsersService {
 
     assertStrongPassword(dto.password, this.config);
     const passwordHash = await bcrypt.hash(dto.password, 12);
+    const tenantId = await this.resolveTenantIdForCreate(user, dto);
 
     return this.prisma.user.create({
       data: {
-        tenantId: user.role === UserRole.SUPER_ADMIN ? null : user.tenantId,
+        tenantId,
         email: dto.email.toLowerCase(),
         passwordHash,
         firstName: dto.firstName,
@@ -98,5 +99,29 @@ export class UsersService {
     if (role === UserRole.SUPER_ADMIN && user.role !== UserRole.SUPER_ADMIN) {
       throw new ForbiddenException('Only platform admins can assign the SUPER_ADMIN role');
     }
+  }
+
+  private async resolveTenantIdForCreate(user: CurrentUserContext, dto: CreateUserDto) {
+    if (user.role !== UserRole.SUPER_ADMIN) {
+      if (!user.tenantId) {
+        throw new ForbiddenException('Tenant scope is required');
+      }
+      return user.tenantId;
+    }
+
+    if (dto.role === UserRole.SUPER_ADMIN) {
+      return null;
+    }
+
+    if (!dto.tenantId) {
+      throw new BadRequestException('tenantId is required when creating a tenant account as SUPER_ADMIN');
+    }
+
+    await this.prisma.tenant.findFirstOrThrow({
+      where: { id: dto.tenantId, deletedAt: null },
+      select: { id: true },
+    });
+
+    return dto.tenantId;
   }
 }

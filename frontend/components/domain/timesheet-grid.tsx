@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, Plus, Save, Send, ThumbsUp, Trash2, Undo2, X } from 'lucide-react';
+import { CalendarDays, Loader2, Plus, Save, Send, ThumbsUp, Trash2, Undo2, X } from 'lucide-react';
 import { api, tokenStore } from '@/lib/api-client';
 import { useApiData } from '@/lib/use-api-data';
 import { ConfirmDialog } from '../ui/confirm-dialog';
@@ -43,6 +43,15 @@ type Line = {
   entries: Entry[];
 };
 
+type CalendarEvent = {
+  id: string;
+  type: 'HOLIDAY' | 'LEAVE';
+  date: string;
+  label: string;
+  code?: string;
+  isPaid?: boolean;
+};
+
 type Timesheet = {
   id: string;
   periodStart: string;
@@ -52,6 +61,11 @@ type Timesheet = {
   permissions?: { canEdit?: boolean };
   user: { id: string; firstName: string; lastName: string };
   approvedBy?: { firstName: string; lastName: string } | null;
+  calendarEvents?: {
+    holidays?: CalendarEvent[];
+    approvedLeaves?: CalendarEvent[];
+    byDate?: Record<string, CalendarEvent[]>;
+  };
   lines: Line[];
 };
 
@@ -115,6 +129,11 @@ function entityLabel(entity?: { code?: string | null; name?: string | null } | n
   return [entity.code, entity.name].filter(Boolean).join(' - ');
 }
 
+function compactEventLabel(events: CalendarEvent[]) {
+  const labels = events.map((event) => event.label).filter(Boolean);
+  return labels.length ? labels.join(', ') : 'Jour special';
+}
+
 export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; onRefresh?: () => void }) {
   const router = useRouter();
   const days = useMemo(() => getDays(timesheet.periodStart, timesheet.periodEnd), [timesheet.periodStart, timesheet.periodEnd]);
@@ -145,6 +164,21 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
   const canReject = isWaitingApproval && isApprover && !isOwner;
   const canReopen = isApprovedOrRejected && isReopener;
   const canDelete = timesheet.status === 'DRAFT' && isOwner;
+  const calendarEventsByDate = useMemo(() => {
+    if (timesheet.calendarEvents?.byDate) return timesheet.calendarEvents.byDate;
+
+    const byDate: Record<string, CalendarEvent[]> = {};
+    for (const event of [
+      ...(timesheet.calendarEvents?.holidays ?? []),
+      ...(timesheet.calendarEvents?.approvedLeaves ?? []),
+    ]) {
+      byDate[event.date] ??= [];
+      byDate[event.date]!.push(event);
+    }
+    return byDate;
+  }, [timesheet.calendarEvents]);
+  const holidayCount = timesheet.calendarEvents?.holidays?.length ?? 0;
+  const approvedLeaveCount = new Set((timesheet.calendarEvents?.approvedLeaves ?? []).map((event) => event.date)).size;
 
   const initialRows = useMemo<EditRow[]>(() => {
     if (timesheet.lines.length === 0) {
@@ -335,14 +369,22 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
           <div className="mt-1.5 flex flex-wrap items-center gap-2">
             <StatusBadge status={timesheet.status} />
             {timesheet.rejectionReason && <span className="text-xs text-dangerText">- {timesheet.rejectionReason}</span>}
+            {(holidayCount > 0 || approvedLeaveCount > 0) && (
+              <span className="inline-flex items-center gap-1 rounded-md border border-borderSoft bg-grayCard px-2 py-0.5 text-xs text-mutedText">
+                <CalendarDays className="h-3 w-3" />
+                {holidayCount > 0 && `${holidayCount} jour(s) ferie(s)`}
+                {holidayCount > 0 && approvedLeaveCount > 0 && ' - '}
+                {approvedLeaveCount > 0 && `${approvedLeaveCount} jour(s) conge approuve`}
+              </span>
+            )}
           </div>
         </div>
 
         <div className="flex flex-wrap gap-2">
           {canDelete && (
             <ConfirmDialog
-              title="Supprimer la timesheet"
-              description="Cette timesheet en brouillon sera supprimee definitivement."
+              title="Supprimer la feuille de temps"
+              description="Cette feuille de temps en brouillon sera supprimee definitivement."
               confirmLabel="Supprimer"
               onConfirm={() => doTransition(() => api.deleteTimesheet(timesheet.id), true)}
               trigger={
@@ -360,7 +402,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
           )}
           {canSubmit && (
             <ConfirmDialog
-              title="Soumettre la timesheet"
+              title="Soumettre la feuille de temps"
               description="Les lignes seront sauvegardees avant la soumission."
               confirmLabel="Soumettre"
               onConfirm={handleSubmit}
@@ -373,8 +415,8 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
           )}
           {canApprove && (
             <ConfirmDialog
-              title="Approuver la timesheet"
-              description={`Approuver la timesheet de ${timesheet.user.firstName} ${timesheet.user.lastName} ?`}
+              title="Approuver la feuille de temps"
+              description={`Approuver la feuille de temps de ${timesheet.user.firstName} ${timesheet.user.lastName} ?`}
               confirmLabel="Approuver"
               onConfirm={() => doTransition(() => api.approveTimesheet(timesheet.id))}
               trigger={
@@ -386,8 +428,8 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
           )}
           {canReject && (
             <ConfirmDialog
-              title="Refuser la timesheet"
-              description={`Refuser la timesheet de ${timesheet.user.firstName} ${timesheet.user.lastName} ?`}
+              title="Refuser la feuille de temps"
+              description={`Refuser la feuille de temps de ${timesheet.user.firstName} ${timesheet.user.lastName} ?`}
               confirmLabel="Refuser"
               onConfirm={() => doTransition(() => api.rejectTimesheet(timesheet.id, 'Refuse par le gestionnaire'))}
               trigger={
@@ -399,8 +441,8 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
           )}
           {canReopen && (
             <ConfirmDialog
-              title="Rouvrir la timesheet"
-              description="La timesheet repassera en brouillon pour modification."
+              title="Rouvrir la feuille de temps"
+              description="La feuille de temps repassera en brouillon pour modification."
               confirmLabel="Rouvrir"
               onConfirm={() => doTransition(() => api.reopenTimesheet(timesheet.id))}
               trigger={
@@ -424,17 +466,38 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
               <th className="border-b border-borderSoft px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">Type</th>
               <th className="border-b border-borderSoft px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">Description</th>
               <th className="border-b border-borderSoft px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">Fact.</th>
-              {days.map((day) => (
-                <th
-                  key={dateKey(day)}
-                  className={`border-b border-borderSoft px-2 py-2.5 text-center text-xs font-semibold ${
-                    day.getUTCDay() === 0 || day.getUTCDay() === 6 ? 'bg-grayCard text-hintText' : 'text-mutedText'
-                  }`}
-                >
-                  <div>{weekDayShort(day)}</div>
-                  <div className="font-normal normal-case text-hintText">{frShort(day)}</div>
-                </th>
-              ))}
+              {days.map((day) => {
+                const key = dateKey(day);
+                const dayEvents = calendarEventsByDate[key] ?? [];
+                const hasHoliday = dayEvents.some((event) => event.type === 'HOLIDAY');
+                const hasLeave = dayEvents.some((event) => event.type === 'LEAVE');
+                return (
+                  <th
+                    key={key}
+                    title={dayEvents.length ? compactEventLabel(dayEvents) : undefined}
+                    className={`border-b border-borderSoft px-2 py-2.5 text-center text-xs font-semibold ${
+                      day.getUTCDay() === 0 || day.getUTCDay() === 6 ? 'bg-grayCard text-hintText' : 'text-mutedText'
+                    } ${hasHoliday ? 'bg-amber-50 text-amber-700' : ''} ${hasLeave ? 'bg-sky-50 text-sky-700' : ''}`}
+                  >
+                    <div>{weekDayShort(day)}</div>
+                    <div className="font-normal normal-case text-hintText">{frShort(day)}</div>
+                    {dayEvents.length > 0 && (
+                      <div className="mt-1 flex flex-col items-center gap-0.5">
+                        {hasHoliday && (
+                          <span className="rounded border border-amber-200 bg-amber-100 px-1 text-[10px] font-semibold text-amber-700">
+                            Ferie
+                          </span>
+                        )}
+                        {hasLeave && (
+                          <span className="rounded border border-sky-200 bg-sky-100 px-1 text-[10px] font-semibold text-sky-700">
+                            Conge
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </th>
+                );
+              })}
               <th className="border-b border-borderSoft px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-mutedText">Total</th>
               {canEdit && <th className="w-8 border-b border-borderSoft" />}
             </tr>
@@ -443,7 +506,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
             {rows.length === 0 && (
               <tr>
                 <td colSpan={6 + days.length} className="px-4 py-10 text-center text-sm text-mutedText">
-                  {canEdit ? 'Aucune ligne. Ajoutez une ligne pour commencer.' : 'Aucune donnee saisie pour cette timesheet.'}
+                  {canEdit ? 'Aucune ligne. Ajoutez une ligne pour commencer.' : 'Aucune donnee saisie pour cette feuille de temps.'}
                 </td>
               </tr>
             )}
@@ -545,10 +608,20 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                   </td>
 
                   {days.map((day) => {
+                    const key = dateKey(day);
                     const hours = row.hoursMap[dateKey(day)] ?? 0;
                     const isWeekend = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+                    const dayEvents = calendarEventsByDate[key] ?? [];
+                    const hasHoliday = dayEvents.some((event) => event.type === 'HOLIDAY');
+                    const hasLeave = dayEvents.some((event) => event.type === 'LEAVE');
                     return (
-                      <td key={dateKey(day)} className={`px-1 py-2 text-center ${isWeekend ? 'bg-grayCard/40' : ''}`}>
+                      <td
+                        key={key}
+                        title={dayEvents.length ? compactEventLabel(dayEvents) : undefined}
+                        className={`px-1 py-2 text-center ${isWeekend ? 'bg-grayCard/40' : ''} ${
+                          hasHoliday ? 'bg-amber-50/70' : hasLeave ? 'bg-sky-50/70' : ''
+                        }`}
+                      >
                         {canEdit ? (
                           <input
                             type="number"

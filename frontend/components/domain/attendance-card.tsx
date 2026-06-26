@@ -54,6 +54,7 @@ export function AttendanceCard() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [todayLoadError, setTodayLoadError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   // GPS
@@ -70,12 +71,17 @@ export function AttendanceCard() {
       const punches = (await api.attendanceToday()) as TodayPunch[];
       // Punch ouvert (entré, pas sorti)
       const open = punches.find((p) => p.checkInAt && !p.checkOutAt);
-      if (open) { setTodayPunch(open); return; }
+      if (open) {
+        setTodayLoadError(null);
+        setTodayPunch(open);
+        return;
+      }
       // Sinon : dernier punch sorti mais pas encore soumis (DRAFT)
       const draftOut = punches.find((p) => p.checkInAt && p.checkOutAt && p.status === 'DRAFT');
+      setTodayLoadError(null);
       setTodayPunch(draftOut ?? null);
-    } catch {
-      // silently ignore
+    } catch (e) {
+      setTodayLoadError(e instanceof Error ? e.message : 'Impossible de charger votre pointage du jour.');
     }
   }, []);
 
@@ -99,6 +105,12 @@ export function AttendanceCard() {
   const isSubmitted   = todayPunch !== null && todayPunch.status === 'SUBMITTED';
   const isApproved    = todayPunch !== null && todayPunch.status === 'APPROVED';
   const isDone        = isSubmitted || isApproved;
+  const currentStep = isDone ? 4 : isCheckedOut ? 3 : isCheckedIn ? 2 : 1;
+  const steps = [
+    { number: 1, label: 'Pointer entree' },
+    { number: 2, label: 'Pointer sortie' },
+    { number: 3, label: 'Soumettre' },
+  ];
 
   async function handleCheckIn() {
     setError(null); setSuccess(null); setLoading(true);
@@ -169,6 +181,34 @@ export function AttendanceCard() {
           <div className="mt-1 text-3xl font-bold text-bodyText">{now.toLocaleTimeString('fr-FR')}</div>
         </div>
         <Clock3 className="h-9 w-9 text-accent" />
+      </div>
+
+      <div className="mt-4 grid gap-2">
+        <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-mutedText">
+          <span>Progression du pointage</span>
+          <span>{isDone ? 'Termine' : `Etape ${currentStep}/3`}</span>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {steps.map((step) => {
+            const isActive = currentStep === step.number;
+            const isComplete = currentStep > step.number;
+            return (
+              <div
+                key={step.number}
+                className={`rounded-md border px-2 py-2 text-center text-xs font-semibold ${
+                  isComplete
+                    ? 'border-successBorder bg-successBg text-successText'
+                    : isActive
+                    ? 'border-accent/40 bg-accentLight text-accentText'
+                    : 'border-borderSoft bg-grayCard text-mutedText'
+                }`}
+              >
+                <span className="block text-[10px] uppercase tracking-wide">Etape {step.number}</span>
+                <span>{step.label}</span>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Indicateur GPS */}
@@ -251,6 +291,18 @@ export function AttendanceCard() {
         )}
 
         {/* Feedback */}
+        {todayLoadError && (
+          <div className="grid gap-2 rounded-md border border-dangerBorder bg-dangerBg px-3 py-2 text-sm text-dangerText">
+            <p>Impossible de charger votre pointage du jour. Reessayez avant de pointer pour eviter un doublon.</p>
+            <button
+              type="button"
+              onClick={() => void loadToday()}
+              className="w-fit rounded-md border border-dangerBorder bg-white px-3 py-1 text-xs font-semibold text-dangerText hover:bg-dangerBg"
+            >
+              Reessayer
+            </button>
+          </div>
+        )}
         {error && (
           <p className="rounded-md border border-dangerBorder bg-dangerBg px-3 py-2 text-sm text-dangerText">{error}</p>
         )}

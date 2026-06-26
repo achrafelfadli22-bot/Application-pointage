@@ -20,6 +20,17 @@ export class DashboardService {
     const today = this.dateOnly(new Date());
     const weekStart = new Date(today);
     weekStart.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
+    const attendanceSettings = user.role === UserRole.SUPER_ADMIN
+      ? null
+      : await this.prisma.tenantSettings.findUnique({
+          where: { tenantId: user.tenantId ?? '__missing__' },
+          select: { workDayStartTime: true, lateToleranceMinutes: true },
+        });
+    const lateThreshold = new Date(today);
+    const thresholdMinutes =
+      this.minutesFromTime(attendanceSettings?.workDayStartTime ?? '08:00') +
+      (attendanceSettings?.lateToleranceMinutes ?? 15);
+    lateThreshold.setUTCHours(Math.floor(thresholdMinutes / 60), thresholdMinutes % 60, 0, 0);
 
     const [
       activeEmployees,
@@ -40,7 +51,7 @@ export class DashboardService {
           ...tenantWhere,
           ...userScope,
           punchDate: today,
-          checkInAt: { gt: new Date(`${today.toISOString().slice(0, 10)}T08:15:00.000Z`) },
+          checkInAt: { gt: lateThreshold },
         },
       }),
       this.prisma.attendancePunch.aggregate({
@@ -99,6 +110,14 @@ export class DashboardService {
 
   private dateOnly(value: Date) {
     return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
+  }
+
+  private minutesFromTime(value: string) {
+    const [hourRaw = '8', minuteRaw = '0'] = value.split(':');
+    const hour = Number(hourRaw);
+    const minute = Number(minuteRaw);
+
+    return (Number.isFinite(hour) ? hour : 8) * 60 + (Number.isFinite(minute) ? minute : 0);
   }
 
   private async siteWhere(user: CurrentUserContext): Promise<Prisma.SiteWhereInput> {

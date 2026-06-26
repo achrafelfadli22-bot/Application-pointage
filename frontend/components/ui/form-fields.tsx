@@ -1,4 +1,4 @@
-import { InputHTMLAttributes, LabelHTMLAttributes, SelectHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, LabelHTMLAttributes, ReactNode, SelectHTMLAttributes } from 'react';
 import { cn } from '@/lib/utils';
 
 const inputBase =
@@ -16,12 +16,14 @@ export function FieldLabel(props: LabelHTMLAttributes<HTMLLabelElement>) {
 export function FormField({
   label,
   className,
+  error,
   ...props
-}: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+}: InputHTMLAttributes<HTMLInputElement> & { label: string; error?: ReactNode }) {
   return (
     <div className="grid gap-1.5">
       <FieldLabel>{label}</FieldLabel>
-      <input {...props} className={cn(inputBase, className)} />
+      <input {...props} aria-invalid={error ? true : props['aria-invalid']} className={cn(inputBase, className)} />
+      {error && <p className="text-xs text-dangerText">{error}</p>}
     </div>
   );
 }
@@ -30,19 +32,21 @@ export function SelectField({
   label,
   children,
   className,
+  error,
   ...props
-}: SelectHTMLAttributes<HTMLSelectElement> & { label: string }) {
+}: SelectHTMLAttributes<HTMLSelectElement> & { label: string; error?: ReactNode }) {
   return (
     <div className="grid gap-1.5">
       <FieldLabel>{label}</FieldLabel>
-      <select {...props} className={cn(inputBase, className)}>
+      <select {...props} aria-invalid={error ? true : props['aria-invalid']} className={cn(inputBase, className)}>
         {children}
       </select>
+      {error && <p className="text-xs text-dangerText">{error}</p>}
     </div>
   );
 }
 
-export function DateField(props: InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+export function DateField(props: InputHTMLAttributes<HTMLInputElement> & { label: string; error?: ReactNode }) {
   return <FormField {...props} type="date" />;
 }
 

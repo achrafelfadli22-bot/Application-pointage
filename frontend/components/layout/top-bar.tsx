@@ -8,7 +8,7 @@ import { ROLE_LABELS } from '@/lib/nav-items';
 
 const breadcrumbs: Record<string, string[]> = {
   '/dashboard':            ['Tableau de bord'],
-  '/timesheets':           ['Timesheets'],
+  '/timesheets':           ['Feuilles de temps'],
   '/team':                 ['Mon équipe'],
   '/projects':             ['Projets'],
   '/sites':                ['Chantiers'],
@@ -21,6 +21,7 @@ const breadcrumbs: Record<string, string[]> = {
   '/admin/tenants':        ['Administration', 'Sociétés'],
   '/admin/subscriptions':  ['Administration', 'Abonnements'],
   '/audit-log':            ["Journal d'audit"],
+  '/profile':              ['Mon profil'],
   '/forgot-password':      ['Mot de passe oublié'],
   '/reset-password':       ['Réinitialisation'],
 };
@@ -76,7 +77,7 @@ function dateRange(start?: string | null, end?: string | null) {
 function timesheetBreadcrumb(timesheet: TimesheetCrumb) {
   const employee = personName(timesheet.user) || 'Employe';
   const period = dateRange(timesheet.periodStart, timesheet.periodEnd);
-  return period ? `Timesheet ${employee} - ${period}` : `Timesheet ${employee}`;
+  return period ? `Feuille de temps ${employee} - ${period}` : `Feuille de temps ${employee}`;
 }
 
 function employeeBreadcrumb(employee: EmployeeCrumb) {
@@ -99,7 +100,7 @@ function getBreadcrumbs(pathname: string, detailLabel?: string | null): string[]
 
   const parts = pathname.split('/').filter(Boolean);
   if (parts.length === 2 && parts[0] === 'timesheets') {
-    return ['Timesheets', detailLabel || 'Detail timesheet'];
+    return ['Feuilles de temps', detailLabel || 'Detail feuille de temps'];
   }
   if (parts.length === 2 && parts[0] === 'team') {
     return ['Mon equipe', detailLabel || 'Fiche employe'];

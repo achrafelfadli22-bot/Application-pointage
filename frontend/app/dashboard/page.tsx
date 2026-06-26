@@ -19,6 +19,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { api, tokenStore } from '@/lib/api-client';
 import { demoCounters, demoLeaveRequests, demoTimesheets } from '@/lib/demo-data';
 import { useApiData } from '@/lib/use-api-data';
+import { fmtTime } from '@/lib/formatters';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -112,9 +113,6 @@ const fallbackBalances: Balance[] = [
 
 function fmt(iso: string, opts?: Intl.DateTimeFormatOptions) {
   return new Date(iso).toLocaleDateString('fr-FR', opts);
-}
-function fmtTime(iso: string) {
-  return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
 function isSameDay(a: Date, b: Date) {
   return a.getUTCFullYear() === b.getUTCFullYear() &&
@@ -340,6 +338,13 @@ function EmployeeDashboard() {
   // Pointage aujourd'hui
   const todayPunch = punches.find((p) => isSameDay(new Date(p.punchDate), today));
   const isWeekend  = today.getDay() === 0 || today.getDay() === 6;
+  const startOfToday = new Date(today);
+  startOfToday.setHours(0, 0, 0, 0);
+  const previousDraftPunch = punches.find((p) =>
+    p.status === 'DRAFT' &&
+    Boolean(p.checkOutAt) &&
+    new Date(p.punchDate) < startOfToday,
+  );
 
   // Récents (5 derniers)
   const recentPunches = [...punches]
@@ -365,12 +370,12 @@ function EmployeeDashboard() {
 
         {/* ── Alertes contextuelles ─────────────────────────────────────────── */}
         <div className="grid gap-2">
-          {/* Non pointé aujourd'hui (jour ouvré) */}
-          {!isWeekend && !todayPunch && (
+          {/* Pointage sorti mais non soumis */}
+          {previousDraftPunch && (
             <AlertBanner kind="warning" icon={AlertTriangle}>
-              Vous n'avez pas encore pointé aujourd'hui.{' '}
+              Vous avez un pointage non soumis du {fmt(previousDraftPunch.punchDate)}.{' '}
               <Link href="/attendance" className="font-semibold underline underline-offset-2">
-                Aller au pointage →
+                Le soumettre →
               </Link>
             </AlertBanner>
           )}
@@ -600,7 +605,7 @@ function AdminDashboard() {
           )}
           {pendingTS > 0 && (
             <AlertBanner kind="warning" icon={ClipboardList}>
-              <strong>{pendingTS} timesheet{pendingTS > 1 ? 's' : ''}</strong> en attente de validation.{' '}
+              <strong>{pendingTS} feuille{pendingTS > 1 ? 's' : ''} de temps</strong> en attente de validation.{' '}
               <Link href="/timesheets" className="font-semibold underline underline-offset-2">
                 Approuver →
               </Link>
@@ -659,7 +664,7 @@ function AdminDashboard() {
               accent="blue"
             />
             <KpiCard
-              label="Timesheets à valider"
+              label="Feuilles de temps à valider"
               value={data.counters.pendingTimesheets}
               icon={ClipboardList}
               accent={pendingTS > 0 ? 'amber' : 'neutral'}
@@ -785,11 +790,11 @@ function AdminDashboard() {
           </section>
         )}
 
-        {/* ── Timesheets à approuver ────────────────────────────────────────── */}
+        {/* ── Feuilles de temps à approuver ─────────────────────────────────── */}
         {data.timesheetsToApprove.length > 0 && (
           <section className="grid gap-3">
             <SectionHeader
-              title="Timesheets à approuver"
+              title="Feuilles de temps à approuver"
               href="/timesheets"
               count={data.timesheetsToApprove.length}
             />
