@@ -16,6 +16,10 @@ const schema = z.object({
 });
 
 type LoginForm = z.infer<typeof schema>;
+const SHOW_DEMO_CREDENTIALS = process.env.NEXT_PUBLIC_SHOW_DEMO_CREDENTIALS === 'true';
+const DEMO_EMAIL = process.env.NEXT_PUBLIC_DEMO_EMAIL;
+const DEMO_PASSWORD = process.env.NEXT_PUBLIC_DEMO_PASSWORD;
+const DEMO_LABEL = process.env.NEXT_PUBLIC_DEMO_LABEL ?? 'Compte de demonstration';
 
 function safeNextPath(value: string | null) {
   if (!value || !value.startsWith('/') || value.startsWith('//')) {
@@ -140,13 +144,14 @@ export default function LoginPage() {
           </form>
         </div>
 
-        {/* Comptes de test */}
-        <div className="mt-4 rounded-lg border border-borderSoft bg-surface p-4 text-xs text-mutedText">
-          <p className="mb-1.5 font-medium text-bodyText">Comptes de test</p>
-          <p>a.elyoussefi@futura-expert.com</p>
-          <p>Compte Ressource Manager - Futura Expertise</p>
-          <p className="mt-1.5 text-hintText">Mot de passe : Password123!</p>
-        </div>
+        {SHOW_DEMO_CREDENTIALS && DEMO_EMAIL && DEMO_PASSWORD && (
+          <div className="mt-4 rounded-lg border border-borderSoft bg-surface p-4 text-xs text-mutedText">
+            <p className="mb-1.5 font-medium text-bodyText">Comptes de test</p>
+            <p>{DEMO_EMAIL}</p>
+            <p>{DEMO_LABEL}</p>
+            <p className="mt-1.5 text-hintText">Mot de passe : {DEMO_PASSWORD}</p>
+          </div>
+        )}
       </div>
     </main>
   );

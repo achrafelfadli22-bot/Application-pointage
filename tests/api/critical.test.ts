@@ -46,8 +46,15 @@ type Site = {
   managerId: string | null;
 };
 
-const runOffsetDays = 420 + ((Math.floor(Date.now() / 1000) % 50_000) * 7);
+const runOffsetDays = 35 + ((Math.floor(Date.now() / 1000) % 32) * 7);
 const runId = `${Date.now()}-${Math.floor(Math.random() * 10_000)}`;
+const createdAttendanceIds = new Set<string>();
+const createdHolidayIds = new Set<string>();
+const createdLeaveRequestIds = new Set<string>();
+const createdLeaveTypeIds = new Set<string>();
+const createdSiteIds = new Set<string>();
+const createdTimesheetIds = new Set<string>();
+const createdUserIds = new Set<string>();
 
 async function request<T>(
   path: string,
@@ -112,7 +119,7 @@ async function login(email = RESOURCE_MANAGER_EMAIL) {
 async function createEmployee(token: string, role: string, index: number, overrides: Record<string, unknown> = {}) {
   const normalizedRole = role.toLowerCase().replaceAll('_', '-');
 
-  return request<EmployeeProfile>('/employees', {
+  const employee = await request<EmployeeProfile>('/employees', {
     method: 'POST',
     token,
     body: {
@@ -130,6 +137,8 @@ async function createEmployee(token: string, role: string, index: number, overri
       ...overrides,
     },
   });
+  createdUserIds.add(employee.user.id);
+  return employee;
 }
 
 async function withStep(name: string, fn: () => Promise<void>) {
@@ -156,8 +165,127 @@ function dateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
+function trackTimesheet<T extends Timesheet>(timesheet: T) {
+  createdTimesheetIds.add(timesheet.id);
+  return timesheet;
+}
+
+function assertCriticalApiTargetSafe() {
+  const url = new URL(API_URL);
+  const isLocalApi = ['127.0.0.1', 'localhost', '::1'].includes(url.hostname);
+  if (!isLocalApi && process.env.ALLOW_REMOTE_CRITICAL_API_TESTS !== '1') {
+    throw new Error(
+      `Refusing to run mutating critical API tests against non-local API ${API_URL}. ` +
+        'Set ALLOW_REMOTE_CRITICAL_API_TESTS=1 only for an isolated test environment.',
+    );
+  }
+}
+
+async function cleanupCriticalTestData() {
+  const { PrismaClient } = await import('@prisma/client');
+  const prisma = new PrismaClient();
+  const userIds = [...createdUserIds];
+  const entityIds = [
+    ...createdAttendanceIds,
+    ...createdLeaveRequestIds,
+    ...createdSiteIds,
+    ...createdTimesheetIds,
+  ];
+
+  try {
+    if (entityIds.length || userIds.length) {
+      await prisma.approvalAction.deleteMany({
+        where: {
+          OR: [
+            ...(entityIds.length ? [{ entityId: { in: entityIds } }] : []),
+            ...(userIds.length ? [{ actionById: { in: userIds } }] : []),
+          ],
+        },
+      });
+      await prisma.auditLog.deleteMany({
+        where: {
+          OR: [
+            ...(entityIds.length ? [{ entityId: { in: entityIds } }] : []),
+            ...(userIds.length ? [{ userId: { in: userIds } }] : []),
+          ],
+        },
+      });
+    }
+    if (userIds.length) {
+      await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
+    }
+    if (createdLeaveRequestIds.size || userIds.length) {
+      await prisma.leaveRequest.deleteMany({
+        where: {
+          OR: [
+            ...(createdLeaveRequestIds.size ? [{ id: { in: [...createdLeaveRequestIds] } }] : []),
+            ...(userIds.length ? [{ userId: { in: userIds } }] : []),
+          ],
+        },
+      });
+    }
+    if (createdTimesheetIds.size || userIds.length) {
+      await prisma.timesheet.deleteMany({
+        where: {
+          OR: [
+            ...(createdTimesheetIds.size ? [{ id: { in: [...createdTimesheetIds] } }] : []),
+            ...(userIds.length ? [{ userId: { in: userIds } }] : []),
+          ],
+        },
+      });
+    }
+    if (createdAttendanceIds.size || userIds.length) {
+      await prisma.attendancePunch.deleteMany({
+        where: {
+          OR: [
+            ...(createdAttendanceIds.size ? [{ id: { in: [...createdAttendanceIds] } }] : []),
+            ...(userIds.length ? [{ userId: { in: userIds } }] : []),
+          ],
+        },
+      });
+    }
+    await prisma.holiday.deleteMany({
+      where: {
+        OR: [
+          ...(createdHolidayIds.size ? [{ id: { in: [...createdHolidayIds] } }] : []),
+          { name: { contains: runId } },
+        ],
+      },
+    });
+    await prisma.leaveType.deleteMany({
+      where: {
+        OR: [
+          ...(createdLeaveTypeIds.size ? [{ id: { in: [...createdLeaveTypeIds] } }] : []),
+          { code: `CRT-LV-${runId}` },
+        ],
+      },
+    });
+    await prisma.site.deleteMany({
+      where: {
+        OR: [
+          ...(createdSiteIds.size ? [{ id: { in: [...createdSiteIds] } }] : []),
+          { code: `CRT-SITE-${runId}` },
+        ],
+      },
+    });
+    await prisma.user.deleteMany({
+      where: {
+        OR: [
+          ...(userIds.length ? [{ id: { in: userIds } }] : []),
+          { email: { contains: `-${runId}-` } },
+        ],
+      },
+    });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
 export async function runCriticalApiTests() {
-  await withStep('health DB Redis MinIO', async () => {
+  assertCriticalApiTargetSafe();
+
+  try {
+    await withStep('health DB Redis MinIO', async () => {
     const health = await request<HealthPayload>('/health');
     assert.equal(health.dependencies.database.status, 'up', 'Database health must be up');
     assert.ok(health.dependencies.redis, 'Redis health is missing');
@@ -195,6 +323,7 @@ export async function runCriticalApiTests() {
         status: 'ACTIVE',
       },
     });
+    createdSiteIds.add(site.id);
 
     const employee = await createEmployee(resourceManager.accessToken, 'EMPLOYEE', 11, { mainSiteId: site.id });
     const employeeSession = await login(employee.user.email);
@@ -208,6 +337,7 @@ export async function runCriticalApiTests() {
         employeeComment: 'Critical N1 approval fallback',
       },
     });
+    createdAttendanceIds.add(punch.id);
 
     const submitted = await request<AttendancePunch>(`/attendance/${punch.id}/submit`, {
       method: 'POST',
@@ -227,14 +357,14 @@ export async function runCriticalApiTests() {
     const end = new Date(start);
     end.setUTCDate(start.getUTCDate() + 6);
 
-    const created = await request<Timesheet>('/timesheets', {
+    const created = trackTimesheet(await request<Timesheet>('/timesheets', {
       method: 'POST',
       token: resourceManager.accessToken,
       body: {
         periodStart: dateOnly(start),
         periodEnd: dateOnly(end),
       },
-    });
+    }));
 
     await request(`/timesheets/${created.id}/submit`, {
       method: 'POST',
@@ -248,14 +378,14 @@ export async function runCriticalApiTests() {
     const end = new Date(start);
     end.setUTCDate(start.getUTCDate() + 6);
 
-    const created = await request<Timesheet>('/timesheets', {
+    const created = trackTimesheet(await request<Timesheet>('/timesheets', {
       method: 'POST',
       token: resourceManager.accessToken,
       body: {
         periodStart: dateOnly(start),
         periodEnd: dateOnly(end),
       },
-    });
+    }));
 
     await request<Timesheet>(`/timesheets/${created.id}`, {
       method: 'PUT',
@@ -308,8 +438,9 @@ export async function runCriticalApiTests() {
         status: 'ACTIVE',
       },
     });
+    createdLeaveTypeIds.add(leaveType.id);
 
-    await request('/settings/holidays', {
+    const holiday = await request<{ id: string }>('/settings/holidays', {
       method: 'POST',
       token: resourceManager.accessToken,
       body: {
@@ -319,6 +450,7 @@ export async function runCriticalApiTests() {
         isRecurring: false,
       },
     });
+    createdHolidayIds.add(holiday.id);
 
     const leave = await request<{ id: string; status: string }>('/leave/requests', {
       method: 'POST',
@@ -330,6 +462,7 @@ export async function runCriticalApiTests() {
         comment: 'Critical approved leave marker',
       },
     });
+    createdLeaveRequestIds.add(leave.id);
     await request(`/leave/requests/${leave.id}/submit`, { method: 'POST', token: employeeSession.accessToken });
     const approvedLeave = await request<{ status: string }>(`/leave/requests/${leave.id}/approve`, {
       method: 'POST',
@@ -337,14 +470,14 @@ export async function runCriticalApiTests() {
     });
     assert.equal(approvedLeave.status, 'APPROVED');
 
-    const timesheet = await request<Timesheet>('/timesheets', {
+    const timesheet = trackTimesheet(await request<Timesheet>('/timesheets', {
       method: 'POST',
       token: employeeSession.accessToken,
       body: {
         periodStart: dateOnly(start),
         periodEnd: dateOnly(end),
       },
-    });
+    }));
 
     await request<Timesheet>(`/timesheets/${timesheet.id}`, {
       method: 'PUT',
@@ -391,14 +524,14 @@ export async function runCriticalApiTests() {
     const end = new Date(start);
     end.setUTCDate(start.getUTCDate() + 6);
 
-    const created = await request<Timesheet>('/timesheets', {
+    const created = trackTimesheet(await request<Timesheet>('/timesheets', {
       method: 'POST',
       token: resourceManager.accessToken,
       body: {
         periodStart: dateOnly(start),
         periodEnd: dateOnly(end),
       },
-    });
+    }));
 
     const deleted = await request<{ id: string; deleted: boolean }>(`/timesheets/${created.id}`, {
       method: 'DELETE',
@@ -413,14 +546,14 @@ export async function runCriticalApiTests() {
     const end = new Date(start);
     end.setUTCDate(start.getUTCDate() + 6);
 
-    const created = await request<Timesheet>('/timesheets', {
+    const created = trackTimesheet(await request<Timesheet>('/timesheets', {
       method: 'POST',
       token: resourceManager.accessToken,
       body: {
         periodStart: dateOnly(start),
         periodEnd: dateOnly(end),
       },
-    });
+    }));
 
     await request<Timesheet>(`/timesheets/${created.id}`, {
       method: 'PUT',
@@ -458,14 +591,14 @@ export async function runCriticalApiTests() {
     const end = new Date(start);
     end.setUTCDate(start.getUTCDate() + 6);
 
-    const created = await request<Timesheet>('/timesheets', {
+    const created = trackTimesheet(await request<Timesheet>('/timesheets', {
       method: 'POST',
       token: managerSession.accessToken,
       body: {
         periodStart: dateOnly(start),
         periodEnd: dateOnly(end),
       },
-    });
+    }));
 
     await request<Timesheet>(`/timesheets/${created.id}`, {
       method: 'PUT',
@@ -513,7 +646,10 @@ export async function runCriticalApiTests() {
     });
   });
 
-  process.stdout.write('API critical tests passed\n');
+    process.stdout.write('API critical tests passed\n');
+  } finally {
+    await cleanupCriticalTestData();
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

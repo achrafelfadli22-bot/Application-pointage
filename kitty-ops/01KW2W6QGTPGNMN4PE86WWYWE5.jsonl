@@ -1,0 +1,3 @@
+{"event": "started", "invocation_id": "01KW2W6QGTPGNMN4PE86WWYWE5", "profile_id": "implementer-ivan", "action": "generate", "request_text": "finaliser Pointage360 avec les correctifs P0/P1 de l'audit using speckitty", "actor": "operator", "mode_of_work": "task_execution", "governance_context_hash": "cba73a944a12a006", "governance_context_available": true, "started_at": "2026-06-26T21:08:45.306610+00:00"}
+{"event": "completed", "invocation_id": "01KW2W6QGTPGNMN4PE86WWYWE5", "completed_at": "2026-06-26T23:37:23.981785+00:00", "outcome": "done", "closed_by": "agent"}
+{"event": "artifact_link", "invocation_id": "01KW2W6QGTPGNMN4PE86WWYWE5", "at": "2026-06-26T23:37:24.024434+00:00", "kind": "artifact", "ref": "typecheck; lint; build; test:api; browser:\\timesheets"}

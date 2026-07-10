@@ -13,6 +13,7 @@ import { StatusBadge } from '@/components/ui/status-badge';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
 import { DateField, SelectField } from '@/components/ui/form-fields';
+import { ErrorState } from '@/components/ui/states';
 import { api, tokenStore } from '@/lib/api-client';
 import { demoTimesheets } from '@/lib/demo-data';
 import { useApiData } from '@/lib/use-api-data';
@@ -170,12 +171,12 @@ function NewTimesheetModal({ onCreated }: { onCreated: () => void }) {
 export default function TimesheetsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TimesheetStatusFilter>('ALL');
-  const { data, refresh } = useApiData<Timesheet[]>(() => api.timesheets() as Promise<Timesheet[]>, demoTimesheets);
+  const { data, error: loadError, refresh } = useApiData<Timesheet[]>(() => api.timesheets() as Promise<Timesheet[]>, demoTimesheets);
 
   // Timesheets validees par N+1/N+2 ou HR.
   const myRole    = tokenStore.session?.role ?? '';
   const myUserId  = tokenStore.session?.user?.id ?? '';
-  const canManage = ['HR', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
+  const canManage = ['RESOURCE_MANAGER', 'HR', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
   // HR est en lecture seule — ne peut pas créer de timesheet
   const canCreate = ['RESOURCE_MANAGER', 'PROJECT_MANAGER', 'MANAGER', 'EMPLOYEE'].includes(myRole);
 
@@ -266,6 +267,7 @@ export default function TimesheetsPage() {
             {actionError}
           </div>
         )}
+        {loadError && <ErrorState message={`Erreur de chargement des feuilles de temps : ${loadError}`} />}
 
         <SummaryCounters
           items={[

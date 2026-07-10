@@ -16,6 +16,7 @@ import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { DataTable } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { ErrorState } from '@/components/ui/states';
 import { api, tokenStore } from '@/lib/api-client';
 import { demoCounters, demoLeaveRequests, demoTimesheets } from '@/lib/demo-data';
 import { useApiData } from '@/lib/use-api-data';
@@ -307,11 +308,12 @@ function LeaveRow({ leave }: { leave: LeaveRequest }) {
 // ─── Vue Employé ──────────────────────────────────────────────────────────────
 
 function EmployeeDashboard() {
-  const { data: punches }  = useApiData<Punch[]>(() => api.attendance() as Promise<Punch[]>, fallbackPunches);
-  const { data: leaves }   = useApiData<LeaveRequest[]>(() => api.leaveRequests() as Promise<LeaveRequest[]>, fallbackLeave);
-  const { data: balances } = useApiData<Balance[]>(() => api.leaveBalances() as Promise<Balance[]>, fallbackBalances);
+  const { data: punches, error: punchesError } = useApiData<Punch[]>(() => api.attendance() as Promise<Punch[]>, fallbackPunches);
+  const { data: leaves, error: leavesError } = useApiData<LeaveRequest[]>(() => api.leaveRequests() as Promise<LeaveRequest[]>, fallbackLeave);
+  const { data: balances, error: balancesError } = useApiData<Balance[]>(() => api.leaveBalances() as Promise<Balance[]>, fallbackBalances);
 
   const firstName = tokenStore.session?.user?.firstName ?? '';
+  const loadError = punchesError ?? leavesError ?? balancesError;
 
   // ── Stats ──────────────────────────────────────────────────────────────────
   const today = new Date();
@@ -361,6 +363,7 @@ function EmployeeDashboard() {
   return (
     <AppShell>
       <div className="grid gap-5">
+        {loadError && <ErrorState message={`Erreur de chargement du tableau de bord : ${loadError}`} />}
 
         {/* Header */}
         <PageHeader
@@ -527,7 +530,7 @@ function EmployeeDashboard() {
 // ─── Vue Manager / HR / Admin ─────────────────────────────────────────────────
 
 function AdminDashboard() {
-  const { data } = useApiData<DashboardData>(
+  const { data, error } = useApiData<DashboardData>(
     () => api.dashboard() as Promise<DashboardData>,
     fallbackAdmin,
   );
@@ -587,6 +590,7 @@ function AdminDashboard() {
   return (
     <AppShell>
       <div className="grid gap-5">
+        {error && <ErrorState message={`Erreur de chargement du tableau de bord : ${error}`} />}
 
         <PageHeader
           title={`${greeting}${firstName ? `, ${firstName}` : ''} 👋`}
