@@ -86,7 +86,7 @@ export function buildAttendanceSheet(data: any[]): ExcelSheet[] {
   const rows = data.map((p) => ({
     employe:  `${p.user?.firstName ?? ''} ${p.user?.lastName ?? ''}`.trim(),
     email:    p.user?.email ?? '',
-    chantier: p.site?.name ?? '—',
+    site: p.site?.name ?? '—',
     code:     p.site?.code ?? '',
     date:     fmtDate(p.punchDate),
     entree:   fmtTime(p.checkInAt),
@@ -102,8 +102,8 @@ export function buildAttendanceSheet(data: any[]): ExcelSheet[] {
     columns: [
       { header: 'Employé',         key: 'employe',    width: 22 },
       { header: 'Email',            key: 'email',      width: 28 },
-      { header: 'Chantier',         key: 'chantier',   width: 24 },
-      { header: 'Code chantier',    key: 'code',       width: 14 },
+      { header: 'Site',         key: 'site',   width: 24 },
+      { header: 'Code site',    key: 'code',       width: 14 },
       { header: 'Date',             key: 'date',       width: 14 },
       { header: 'Entrée',           key: 'entree',     width: 10 },
       { header: 'Sortie',           key: 'sortie',     width: 10 },
@@ -128,13 +128,13 @@ export function buildGpsAnomaliesSheet(data: any[]): ExcelSheet[] {
     email:     p.user?.email ?? '',
     date:      fmtDate(p.punchDate),
     heure:     fmtTime(p.checkInAt),
-    chantier:  p.site?.name ?? '—',
+    site:  p.site?.name ?? '—',
     code:      p.site?.code ?? '',
     rayon:     p.site?.gpsRadiusMeters ?? '',
     latPointage:  p.latitude ?? '',
     lngPointage:  p.longitude ?? '',
-    latChantier:  p.site?.latitude ?? '',
-    lngChantier:  p.site?.longitude ?? '',
+    latSite:  p.site?.latitude ?? '',
+    lngSite:  p.site?.longitude ?? '',
     statut:    statusLabel(p.status ?? ''),
   }));
 
@@ -145,25 +145,25 @@ export function buildGpsAnomaliesSheet(data: any[]): ExcelSheet[] {
       { header: 'Email',             key: 'email',        width: 28 },
       { header: 'Date',              key: 'date',         width: 14 },
       { header: 'Heure',             key: 'heure',        width: 10 },
-      { header: 'Chantier',          key: 'chantier',     width: 24 },
+      { header: 'Site',          key: 'site',     width: 24 },
       { header: 'Code',              key: 'code',         width: 12 },
       { header: 'Rayon autorisé (m)',key: 'rayon',        width: 18, type: 'number' },
       { header: 'Lat. pointage',     key: 'latPointage',  width: 16 },
       { header: 'Lng. pointage',     key: 'lngPointage',  width: 16 },
-      { header: 'Lat. chantier',     key: 'latChantier',  width: 16 },
-      { header: 'Lng. chantier',     key: 'lngChantier',  width: 16 },
+      { header: 'Lat. site',     key: 'latSite',  width: 16 },
+      { header: 'Lng. site',     key: 'lngSite',  width: 16 },
       { header: 'Statut',            key: 'statut',       width: 14 },
     ],
     rows,
   }];
 }
 
-// ─── Heures par chantier ──────────────────────────────────────────────────────
+// ─── Heures par site ──────────────────────────────────────────────────────
 
 export function buildHoursBySiteSheet(data: any[]): ExcelSheet[] {
   const rows = data.map((r) => ({
     code:      r.site?.code ?? '—',
-    chantier:  r.site?.name ?? '—',
+    site:  r.site?.name ?? '—',
     ville:     r.site?.city ?? '',
     heures:    r.hours ?? 0,
     pointages: r.punches ?? 0,
@@ -173,10 +173,10 @@ export function buildHoursBySiteSheet(data: any[]): ExcelSheet[] {
   const totalP = rows.reduce((s, r) => s + (r.pointages as number), 0);
 
   return [{
-    name: 'Heures par chantier',
+    name: 'Heures par site',
     columns: [
-      { header: 'Code chantier', key: 'code',      width: 16 },
-      { header: 'Chantier',      key: 'chantier',  width: 28 },
+      { header: 'Code site', key: 'code',      width: 16 },
+      { header: 'Site',      key: 'site',  width: 28 },
       { header: 'Ville',         key: 'ville',     width: 18 },
       { header: 'Total heures',  key: 'heures',    width: 14, type: 'number' },
       { header: 'Nb pointages',  key: 'pointages', width: 14, type: 'number' },
@@ -343,7 +343,7 @@ export function buildTimesheetsSheet(data: any[]): ExcelSheet[] {
           rowsByLine.set(key, {
             rubrique,
             projet: project,
-            chantier: site,
+            site: site,
             description: line.taskName || '',
             ...Object.fromEntries(effectiveDateKeys.map((_, i) => [`d${i}`, 0])),
             total: 0,
@@ -364,7 +364,7 @@ export function buildTimesheetsSheet(data: any[]): ExcelSheet[] {
     }
 
     const rows = Array.from(rowsByLine.values()).sort((a, b) =>
-      `${a.rubrique} ${a.projet} ${a.chantier}`.localeCompare(`${b.rubrique} ${b.projet} ${b.chantier}`, 'fr-FR'),
+      `${a.rubrique} ${a.projet} ${a.site}`.localeCompare(`${b.rubrique} ${b.projet} ${b.site}`, 'fr-FR'),
     );
 
     const baseName = safeSheetName(`TS ${fullName(user)}`, `Timesheet ${index + 1}`);
@@ -387,7 +387,7 @@ export function buildTimesheetsSheet(data: any[]): ExcelSheet[] {
       columns: [
         { header: 'Type / Tache', key: 'rubrique', width: 20 },
         { header: 'Projet', key: 'projet', width: 24 },
-        { header: 'Chantier', key: 'chantier', width: 28 },
+        { header: 'Site', key: 'site', width: 28 },
         { header: 'Description', key: 'description', width: 32 },
         ...dateColumns,
         { header: 'Total', key: 'total', width: 12, type: 'number', style: 'total' },
@@ -426,7 +426,7 @@ function buildTimesheetsSheetLegacy(data: any[]): ExcelSheet[] {
       for (const entry of (line.entries ?? [])) {
         detailRows.push({
           employe:  empName,
-          chantier: line.site?.name ?? '—',
+          site: line.site?.name ?? '—',
           code:     line.site?.code ?? '',
           date:     fmtDate(entry.workDate),
           heures:   fmtHours(entry.durationMinutes),
@@ -460,7 +460,7 @@ function buildTimesheetsSheetLegacy(data: any[]): ExcelSheet[] {
       name: 'Détail des entrées',
       columns: [
         { header: 'Employé',    key: 'employe',  width: 24 },
-        { header: 'Chantier',   key: 'chantier', width: 24 },
+        { header: 'Site',   key: 'site', width: 24 },
         { header: 'Code',       key: 'code',     width: 12 },
         { header: 'Date',       key: 'date',     width: 14 },
         { header: 'Heures',     key: 'heures',   width: 10, type: 'number' },

@@ -162,7 +162,7 @@ export class ReportsService {
     };
   }
 
-  // ─── Rapport 2 : Charge par chantier / projet ────────────────────────────────
+  // ─── Rapport 2 : Charge par site / projet ────────────────────────────────
 
   async siteWorkload(user: CurrentUserContext, filters: ReportFilterDto) {
     const tenantWhere = this.tenantWhere(user);

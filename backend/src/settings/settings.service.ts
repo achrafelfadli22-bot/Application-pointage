@@ -14,7 +14,7 @@ import { UpdateTimesheetTaskTypesDto } from './dto/update-timesheet-task-types.d
 const DEFAULT_TIMESHEET_TASK_TYPES = [
   { value: 'EXECUTION', label: 'Execution travaux', isActive: true },
   { value: 'PREPARATION', label: 'Preparation', isActive: true },
-  { value: 'REUNION_CHANTIER', label: 'Reunion chantier', isActive: true },
+  { value: 'REUNION_CHANTIER', label: 'Reunion site', isActive: true },
   { value: 'CONTROLE_QUALITE', label: 'Controle qualite', isActive: true },
   { value: 'ADMINISTRATIF', label: 'Administratif', isActive: true },
   { value: 'AUTRE', label: 'Autre', isActive: true },
@@ -28,7 +28,7 @@ const DEFAULT_SITE_ROLE_OPTIONS = [
   'Aide electricien',
   'Controle qualite',
   'HSE',
-  'Administratif chantier',
+  'Administratif site',
 ];
 
 const DEFAULT_JOB_TITLE_OPTIONS = [

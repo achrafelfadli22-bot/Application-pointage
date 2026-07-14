@@ -222,7 +222,7 @@ children.push(makeTable(
     ["User Management", "Complete", "CRUD, role assignment, soft delete"],
     ["Employee Profiles", "Complete", "Employee number, job title, contract, hire date, leave balance"],
     ["Projects", "Complete", "CRUD, project manager assignment, status tracking"],
-    ["Sites (Chantiers)", "Complete", "CRUD, GPS coordinates, radius, manager assignment, progress"],
+    ["Sites (Sites)", "Complete", "CRUD, GPS coordinates, radius, manager assignment, progress"],
     ["Site Assignments", "Complete", "Employee-Site assignments with date ranges and roles"],
     ["Attendance (Pointage)", "Complete", "Check-in/out, GPS validation, anomaly detection, approval workflow"],
     ["Timesheets", "Complete", "Period-based, billable/non-billable, submission/approval/rejection/reopen"],

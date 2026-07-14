@@ -46,16 +46,16 @@ const RAPPORTS: RapportDef[] = [
   {
     nom: 'Anomalies GPS',
     endpoint: 'gps-anomalies',       // GET /api/reports/gps-anomalies
-    description: 'Pointages hors périmètre chantier — à traiter avant validation.',
+    description: 'Pointages hors périmètre site — à traiter avant validation.',
     categorie: 'presence',
     icon: MapPinOff,
     roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'],
   },
   // Opérations
   {
-    nom: 'Heures par chantier',
+    nom: 'Heures par site',
     endpoint: 'hours-by-site',       // GET /api/reports/hours-by-site
-    description: 'Total des heures travaillées ventilé par chantier sur la période.',
+    description: 'Total des heures travaillées ventilé par site sur la période.',
     categorie: 'operations',
     icon: Building2,
     roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'],
@@ -236,7 +236,7 @@ export default function ReportsPage() {
       <div className="grid gap-6">
         <PageHeader
           title="Rapports"
-          description="Exportez vos donnees RH, presence, paie et chantiers au format Excel."
+          description="Exportez vos donnees RH, presence, paie et sites au format Excel."
         />
 
         {/* Filtres globaux */}
@@ -261,8 +261,8 @@ export default function ReportsPage() {
             <DateField label="Date début" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
             <DateField label="Date fin"   value={dateTo}   onChange={(e) => setDateTo(e.target.value)} />
             {canFilterSites ? (
-              <SelectField label="Chantier" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-                <option value="">Tous les chantiers</option>
+              <SelectField label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+                <option value="">Tous les sites</option>
                 {sites.map((s) => (
                   <option key={s.id} value={s.id}>{s.code} — {s.name}</option>
                 ))}

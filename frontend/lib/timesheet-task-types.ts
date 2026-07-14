@@ -7,7 +7,7 @@ export type TimesheetTaskType = {
 export const DEFAULT_TIMESHEET_TASK_TYPES: TimesheetTaskType[] = [
   { value: 'EXECUTION', label: 'Execution travaux', isActive: true },
   { value: 'PREPARATION', label: 'Preparation', isActive: true },
-  { value: 'REUNION_CHANTIER', label: 'Reunion chantier', isActive: true },
+  { value: 'REUNION_CHANTIER', label: 'Reunion site', isActive: true },
   { value: 'CONTROLE_QUALITE', label: 'Controle qualite', isActive: true },
   { value: 'ADMINISTRATIF', label: 'Administratif', isActive: true },
   { value: 'AUTRE', label: 'Autre', isActive: true },

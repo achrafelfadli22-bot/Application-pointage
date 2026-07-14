@@ -95,7 +95,7 @@ const services = [
 ];
 
 const pointageFeatures = [
-  "Pointage GPS chantier en temps réel",
+  "Pointage GPS site en temps réel",
   "Feuilles de temps hebdomadaires / mensuelles",
   "Demandes et suivi des congés",
   "Validation hiérarchique N+1 / N+2",
@@ -541,7 +541,7 @@ export function LandingPage() {
                 de Futura
               </h2>
               <p className="mt-5 max-w-xl text-base font-light leading-8" style={{ color: theme.panelMuted }}>
-                Les collaborateurs pointent sur chantier, soumettent leurs feuilles de temps et suivent leurs congés depuis un seul espace sécurisé, accessible depuis n&apos;importe quel appareil.
+                Les collaborateurs pointent sur site, soumettent leurs feuilles de temps et suivent leurs congés depuis un seul espace sécurisé, accessible depuis n&apos;importe quel appareil.
               </p>
               <ul className="mt-7 grid gap-3 sm:grid-cols-2">
                 {pointageFeatures.map((f) => (
@@ -577,7 +577,7 @@ export function LandingPage() {
                 </div>
               </div>
               <div className="mt-6 grid grid-cols-3 gap-3">
-                {["Pointage GPS", "Feuilles de temps", "Congés", "Équipe", "Rapports", "Chantiers"].map((item) => (
+                {["Pointage GPS", "Feuilles de temps", "Congés", "Équipe", "Rapports"].map((item) => (
                   <div
                     key={item}
                     className="rounded-lg border p-3 text-center text-xs font-semibold transition hover:opacity-80"

@@ -17,7 +17,7 @@ type TodayPunch = {
 };
 
 const WORK_LOCATIONS: { value: string; label: string }[] = [
-  { value: 'SITE', label: 'Chantier' },
+  { value: 'SITE', label: 'Site' },
   { value: 'OFFICE', label: 'Bureau' },
   { value: 'HOME', label: 'Domicile' },
   { value: 'TRAVEL', label: 'Déplacement' },
@@ -262,10 +262,10 @@ export function AttendanceCard() {
       )}
 
       <div className="mt-5 grid gap-4">
-        {/* Chantier & lieu — uniquement avant check-in */}
+        {/* Site & lieu — uniquement avant check-in */}
         {!isCheckedIn && !isCheckedOut && !isDone && (
-          <SelectField label="Chantier" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
-            <option value="">— Aucun chantier —</option>
+          <SelectField label="Site" value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+            <option value="">— Aucun site —</option>
             {sites.map((s) => (
               <option key={s.id} value={s.id}>{s.code} — {s.name}</option>
             ))}
@@ -286,7 +286,7 @@ export function AttendanceCard() {
             label="Commentaire optionnel"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Ex : retard matériaux, réunion chantier…"
+            placeholder="Ex : retard matériaux, réunion site…"
           />
         )}
 

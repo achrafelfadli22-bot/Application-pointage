@@ -247,8 +247,8 @@ export default function TeamPage() {
     { header: 'Email',              cell: ({ row }) => row.original.user.email },
     { header: 'Poste',              accessorKey: 'jobTitle' },
     { header: 'Rôle',               cell: ({ row }) => ROLE_LABELS[row.original.user.role] ?? row.original.user.role },
-    { header: 'Chantier principal', cell: ({ row }) => row.original.mainSite?.name ?? '—' },
-    { header: 'Chantiers gérés',    cell: ({ row }) => managedSitesLabel(row.original) },
+    { header: 'Site principal', cell: ({ row }) => row.original.mainSite?.name ?? '—' },
+    { header: 'Sites gérés',    cell: ({ row }) => managedSitesLabel(row.original) },
     { header: 'Statut',             cell: ({ row }) => <StatusBadge status={row.original.status} /> },
     { header: 'Solde congés',       cell: ({ row }) => `${row.original.annualLeaveBalance} j` },
     {
@@ -285,7 +285,7 @@ export default function TeamPage() {
       <div className="grid gap-6">
         <PageHeader
           title="Mon équipe"
-          description="Employés, rôles, affectations chantier et statut RH."
+          description="Employés, rôles, affectations site et statut RH."
           actions={canManageEmployees ? (
             <div className="flex items-center gap-2">
               <CsvImportModal onImported={refresh} />
@@ -315,8 +315,8 @@ export default function TeamPage() {
             <option value="HR">RH</option>
             <option value="RESOURCE_MANAGER">Ressource Manager</option>
           </SelectField>
-          <SelectField label="Chantier" value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)}>
-            <option value="">Tous les chantiers</option>
+          <SelectField label="Site" value={siteFilter} onChange={(e) => setSiteFilter(e.target.value)}>
+            <option value="">Tous les sites</option>
             {sites.map((s) => (
               <option key={s.id} value={s.id}>{s.code} - {s.name}</option>
             ))}

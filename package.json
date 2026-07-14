@@ -2,7 +2,7 @@
   "name": "pointage360",
   "private": true,
   "version": "0.1.0",
-  "description": "Pointage360 - plateforme SaaS multi-tenant de pointage, timesheets, conges et chantiers.",
+  "description": "Pointage360 - plateforme SaaS multi-tenant de pointage, timesheets, conges et sites.",
   "packageManager": "pnpm@9.15.4",
   "scripts": {
     "dev": "turbo dev",

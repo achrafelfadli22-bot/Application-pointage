@@ -11,7 +11,7 @@ const breadcrumbs: Record<string, string[]> = {
   '/timesheets':           ['Feuilles de temps'],
   '/team':                 ['Mon équipe'],
   '/projects':             ['Projets'],
-  '/sites':                ['Chantiers'],
+  '/sites':                ['Sites'],
   '/attendance':           ['Pointage'],
   '/time-off':             ['Congés'],
   '/time-off/requests':    ['Congés', 'Demandes'],
@@ -87,7 +87,7 @@ function employeeBreadcrumb(employee: EmployeeCrumb) {
 
 function siteBreadcrumb(site: SiteCrumb) {
   if (site.code && site.name) return `${site.code} - ${site.name}`;
-  return site.name || site.code || 'Detail chantier';
+  return site.name || site.code || 'Detail site';
 }
 
 function projectBreadcrumb(project: ProjectCrumb) {
@@ -106,7 +106,7 @@ function getBreadcrumbs(pathname: string, detailLabel?: string | null): string[]
     return ['Mon equipe', detailLabel || 'Fiche employe'];
   }
   if (parts.length === 2 && parts[0] === 'sites') {
-    return ['Chantiers', detailLabel || 'Detail chantier'];
+    return ['Sites', detailLabel || 'Detail site'];
   }
   if (parts.length === 2 && parts[0] === 'projects') {
     return ['Projets', detailLabel || 'Detail projet'];

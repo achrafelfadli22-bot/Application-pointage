@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ColumnDef } from '@tanstack/react-table';
 import * as Dialog from '@radix-ui/react-dialog';
-import { ArrowLeft, Pencil, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { ProgressMeter } from '@/components/domain/progress-meter';
@@ -196,6 +196,155 @@ function EditProjectModal({
   );
 }
 
+const emptySiteForm = {
+  code: '',
+  name: '',
+  clientName: '',
+  managerId: '',
+  address: '',
+  city: '',
+  country: 'MA',
+  startDate: '',
+  plannedEndDate: '',
+  progressPercent: 0,
+  latitude: '',
+  longitude: '',
+  gpsRadiusMeters: 200,
+};
+
+function NewProjectSiteModal({
+  project,
+  employees,
+  clientOptions,
+  onCreated,
+}: {
+  project: Project;
+  employees: Employee[];
+  clientOptions: string[];
+  onCreated: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState({
+    ...emptySiteForm,
+    clientName: project.clientName ?? '',
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm({ ...emptySiteForm, clientName: project.clientName ?? '' });
+    setError(null);
+  }, [open, project.clientName]);
+
+  const managerOptions = employees
+    .filter((employee) => employee.status === 'ACTIVE')
+    .filter((employee) => employee.user.status !== 'INACTIVE')
+    .filter((employee) => employee.user.role === 'MANAGER');
+
+  async function handleSubmit() {
+    if (!form.code.trim() || !form.name.trim() || !form.clientName.trim()) {
+      setError('Code, nom et client sont obligatoires.');
+      return;
+    }
+
+    setSubmitting(true);
+    setError(null);
+    try {
+      const payload: Record<string, unknown> = {
+        ...form,
+        projectId: project.id,
+        progressPercent: Number(form.progressPercent),
+        gpsRadiusMeters: Number(form.gpsRadiusMeters),
+      };
+      if (!form.managerId) delete payload.managerId;
+      if (!form.address) delete payload.address;
+      if (!form.city) delete payload.city;
+      if (!form.startDate) delete payload.startDate;
+      if (!form.plannedEndDate) delete payload.plannedEndDate;
+      if (form.latitude) payload.latitude = Number(form.latitude);
+      else delete payload.latitude;
+      if (form.longitude) payload.longitude = Number(form.longitude);
+      else delete payload.longitude;
+
+      await api.createSite(payload);
+      setOpen(false);
+      onCreated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Creation impossible.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog.Root open={open} onOpenChange={setOpen}>
+      <Dialog.Trigger asChild>
+        <PrimaryButton type="button">
+          <Plus className="h-4 w-4" />
+          Nouveau site
+        </PrimaryButton>
+      </Dialog.Trigger>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" />
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[min(680px,calc(100vw-32px))] -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-xl border border-borderSoft bg-surface shadow-dropdown">
+          <div className="flex items-center justify-between border-b border-borderSoft px-5 py-4">
+            <div>
+              <Dialog.Title className="text-base font-semibold text-bodyText">Nouveau site</Dialog.Title>
+              <Dialog.Description className="mt-1 text-sm text-mutedText">
+                Ce site sera rattache au projet {project.code} - {project.name}.
+              </Dialog.Description>
+            </div>
+            <Dialog.Close className="flex h-7 w-7 items-center justify-center rounded-md text-mutedText hover:bg-surfaceHover">
+              <X className="h-4 w-4" />
+            </Dialog.Close>
+          </div>
+
+          <div className="grid gap-4 p-5">
+            <div className="grid gap-3 md:grid-cols-2">
+              <FormField label="Code site" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
+              <FormField label="Nom du site" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+              <SelectField label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
+                <option value="">Selectionner</option>
+                {clientOptions.map((client) => <option key={client} value={client}>{client}</option>)}
+              </SelectField>
+              <SelectField label="Chef de site" value={form.managerId} onChange={(e) => setForm((p) => ({ ...p, managerId: e.target.value }))}>
+                <option value="">Selectionner</option>
+                {managerOptions.map((employee) => (
+                  <option key={employee.user.id} value={employee.user.id}>
+                    {employee.user.firstName} {employee.user.lastName}
+                  </option>
+                ))}
+              </SelectField>
+              <FormField label="Adresse" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
+              <FormField label="Ville" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
+              <FormField label="Pays (ISO)" value={form.country} onChange={(e) => setForm((p) => ({ ...p, country: e.target.value }))} />
+              <FormField label="Avancement (%)" type="number" min={0} max={100} value={form.progressPercent} onChange={(e) => setForm((p) => ({ ...p, progressPercent: Number(e.target.value) }))} />
+              <DateField label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
+              <DateField label="Fin prevue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
+            </div>
+
+            <p className="text-xs font-semibold uppercase tracking-wide text-mutedText">Geolocalisation GPS (optionnel)</p>
+            <div className="grid gap-3 md:grid-cols-3">
+              <FormField label="Latitude" value={form.latitude} onChange={(e) => setForm((p) => ({ ...p, latitude: e.target.value }))} />
+              <FormField label="Longitude" value={form.longitude} onChange={(e) => setForm((p) => ({ ...p, longitude: e.target.value }))} />
+              <FormField label="Rayon GPS (m)" type="number" min={1} value={form.gpsRadiusMeters} onChange={(e) => setForm((p) => ({ ...p, gpsRadiusMeters: Number(e.target.value) }))} />
+            </div>
+
+            {error && <p className="text-sm text-dangerText">{error}</p>}
+            <div className="flex justify-end gap-2">
+              <Dialog.Close asChild><SecondaryButton type="button">Annuler</SecondaryButton></Dialog.Close>
+              <PrimaryButton type="button" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? 'Creation...' : 'Creer le site'}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
+  );
+}
+
 export default function ProjectDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -229,20 +378,21 @@ export default function ProjectDetailPage() {
 
   const columns: ColumnDef<ProjectSite, unknown>[] = [
     { header: 'Code', accessorKey: 'code' },
-    {
-      header: 'Chantier',
-      cell: ({ row }) => (
-        <Link href={`/sites/${row.original.id}`} className="font-semibold text-accent hover:underline">
-          {row.original.name}
-        </Link>
-      ),
-    },
+    { header: 'Site', cell: ({ row }) => row.original.name ?? '-' },
     { header: 'Client', accessorKey: 'clientName' },
     { header: 'Ville', cell: ({ row }) => row.original.city ?? '-' },
     { header: 'Chef de site', cell: ({ row }) => row.original.manager ? `${row.original.manager.firstName} ${row.original.manager.lastName}` : '-' },
     { header: 'Equipe', cell: ({ row }) => row.original._count.assignments },
     { header: 'Avancement', cell: ({ row }) => <ProgressMeter value={row.original.progressPercent} size="sm" /> },
     { header: 'Statut', cell: ({ row }) => <StatusBadge status={row.original.status} /> },
+    {
+      header: 'Actions',
+      cell: ({ row }) => (
+        <Link href={`/projects/${project.id}/sites/${row.original.id}`} className="font-semibold text-accent hover:underline">
+          Voir
+        </Link>
+      ),
+    },
   ];
 
   return (
@@ -255,14 +405,14 @@ export default function ProjectDetailPage() {
           </Link>
           <PageHeader
             title={project.name}
-            description={`${project.code} - ${project.clientName ?? 'Client non renseigne'}`}
+            description={`${project.code} - ${project.clientName ?? 'Client non renseigné'}`}
             actions={
               canEdit ? (
                 <div className="flex flex-wrap gap-2">
                   <EditProjectModal project={project} employees={employees} clientOptions={clientOptions} onUpdated={refresh} />
                   <ConfirmDialog
                     title="Supprimer le projet"
-                    description={`Supprimer le projet ${project.name} ? Il sera suspendu et masque de la liste active.`}
+                    description={`Supprimer le projet ${project.name} ? Il sera suspendu et masqué de la liste active.`}
                     confirmLabel="Supprimer"
                     onConfirm={() => void handleDelete()}
                     trigger={
@@ -281,7 +431,7 @@ export default function ProjectDetailPage() {
         <SummaryCounters
           items={[
             { label: 'Statut', value: project.status, active: true },
-            { label: 'Chantiers', value: project.sites.length },
+            { label: 'Sites', value: project.sites.length },
             { label: 'Debut', value: displayDate(project.startDate) },
             { label: 'Fin prevue', value: displayDate(project.plannedEndDate) },
           ]}
@@ -311,9 +461,19 @@ export default function ProjectDetailPage() {
         </AccentCard>
 
         <section className="grid gap-3">
-          <h2 className="text-base font-bold text-bodyText">Chantiers du projet ({project.sites.length})</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-bold text-bodyText">Sites du projet ({project.sites.length})</h2>
+            {canEdit && (
+              <NewProjectSiteModal
+                project={project}
+                employees={employees}
+                clientOptions={clientOptions}
+                onCreated={refresh}
+              />
+            )}
+          </div>
           {project.sites.length === 0 ? (
-            <p className="text-sm text-mutedText">Aucun chantier rattache a ce projet.</p>
+            <p className="text-sm text-mutedText">Aucun site rattache a ce projet.</p>
           ) : (
             <DataTable columns={columns} data={project.sites} />
           )}

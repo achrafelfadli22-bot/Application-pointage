@@ -7,7 +7,7 @@ export function ReportFilters() {
     <div className="grid gap-3 rounded-xl border border-borderSoft bg-surface p-4 shadow-card md:grid-cols-5">
       <DateField label="Date début" />
       <DateField label="Date fin" />
-      <SelectField label="Chantier">
+      <SelectField label="Site">
         <option value="">Tous</option>
         <option>CH-001</option>
       </SelectField>

@@ -36,7 +36,6 @@ type Employee = {
   user: { id: string; firstName: string; lastName: string; email: string; role: string; status?: string };
 };
 
-type Project = { id: string; code: string; name: string };
 type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[] };
 
 type AttendancePunch = {
@@ -122,20 +121,19 @@ const DEFAULT_SITE_ROLE_OPTIONS = [
 
 function EditSiteModal({
   site,
-  projects,
+  projectId,
   employees,
   siteOptions,
   onUpdated,
 }: {
   site: Site;
-  projects: Project[];
+  projectId: string;
   employees: Employee[];
   siteOptions: SiteOptions;
   onUpdated: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
-    projectId: site.project?.id ?? '',
     code: site.code,
     name: site.name,
     clientName: site.clientName,
@@ -157,7 +155,6 @@ function EditSiteModal({
   useEffect(() => {
     if (!open) return;
     setForm({
-      projectId: site.project?.id ?? '',
       code: site.code,
       name: site.name,
       clientName: site.clientName,
@@ -211,7 +208,7 @@ function EditSiteModal({
     setError(null);
     try {
       const payload: Record<string, unknown> = {
-        projectId: form.projectId || undefined,
+        projectId,
         code: form.code,
         name: form.name,
         clientName: form.clientName,
@@ -258,14 +255,6 @@ function EditSiteModal({
 
           <div className="grid gap-4 p-5">
             <div className="grid gap-3 md:grid-cols-2">
-              <SelectField label="Projet" value={form.projectId} onChange={(e) => setForm((p) => ({ ...p, projectId: e.target.value }))}>
-                <option value="">Sans projet</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.code} - {project.name}
-                  </option>
-                ))}
-              </SelectField>
               <FormField label="Code chantier" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
               <FormField label="Nom du chantier" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
               <SelectField label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
@@ -523,9 +512,10 @@ function AssignEmployeeModal({
 }
 
 export default function SiteDetailPage() {
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ id: string; siteId: string }>();
   const router = useRouter();
-  const siteId = params?.id ?? '';
+  const projectId = params?.id ?? '';
+  const siteId = params?.siteId ?? '';
   const fallback = (demoSites.find((s) => s.id === siteId) as Site | undefined) ?? fallbackSite;
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -541,10 +531,6 @@ export default function SiteDetailPage() {
     ['RESOURCE_MANAGER', 'HR'].includes(myRole) || (myRole === 'MANAGER' && site.manager?.id === currentUserId);
   const { data: employees } = useApiData<Employee[]>(
     () => (canManageAssignments ? (api.employees() as Promise<Employee[]>) : Promise.resolve([])),
-    [],
-  );
-  const { data: projects } = useApiData<Project[]>(
-    () => (canEditSite ? (api.projects() as Promise<Project[]>) : Promise.resolve([])),
     [],
   );
   const { data: siteOptions } = useApiData<SiteOptions>(
@@ -628,7 +614,9 @@ export default function SiteDetailPage() {
       header: 'Statut',
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
     },
+
   ];
+  
 
   const gpsAnomalies = site.attendancePunches.filter((p) => p.isGpsAnomaly).length;
   const activeAssignments = site.assignments.filter((a) => !a.endDate || new Date(a.endDate) >= new Date()).length;
@@ -637,7 +625,7 @@ export default function SiteDetailPage() {
     setActionError(null);
     try {
       await api.deleteSite(site.id);
-      router.push('/sites');
+      router.push(`/projects/${projectId}`);
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'Suppression impossible.');
     }
@@ -648,11 +636,11 @@ export default function SiteDetailPage() {
       <div className="grid gap-6">
         <div>
           <Link
-            href="/sites"
+            href={`/projects/${projectId}`}
             className="mb-3 inline-flex items-center gap-1 text-sm text-mutedText hover:text-bodyText"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            Retour aux chantiers
+            Retour au projet
           </Link>
           <PageHeader
             title={site.name}
@@ -663,7 +651,7 @@ export default function SiteDetailPage() {
                   {canEditSite && (
                     <EditSiteModal
                       site={site}
-                      projects={projects}
+                      projectId={projectId}
                       employees={employees}
                       siteOptions={siteOptions}
                       onUpdated={refresh}

@@ -155,7 +155,7 @@ export class MailService {
       html: this.wrap(`
         <h2>Votre pointage a été enregistré</h2>
         <p>Bonjour <strong>${name}</strong>,</p>
-        <p>Votre entrée sur le chantier <strong>${siteName}</strong> a été enregistrée à <strong>${checkInTime}</strong>.</p>
+        <p>Votre entrée sur le site <strong>${siteName}</strong> a été enregistrée à <strong>${checkInTime}</strong>.</p>
         <p>Bonne journée !</p>
       `),
     });

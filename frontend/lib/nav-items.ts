@@ -37,7 +37,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Mon équipe',        href: '/team',                  icon: Users,           roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'],  section: 'RH & Opérations' },
   { label: 'Planning équipe',   href: '/planning',              icon: CalendarRange,   roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
   { label: 'Projets',           href: '/projects',              icon: FolderKanban,    roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
-  { label: 'Chantiers',         href: '/sites',                 icon: HardHat,         roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
+  //{ label: 'Sites',         href: '/sites',                 icon: HardHat,         roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] }, // to remove
   { label: 'Rapports',          href: '/reports',               icon: BarChart3,       roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
 
   // ── Compte ──────────────────────────────────────────────────────────────────

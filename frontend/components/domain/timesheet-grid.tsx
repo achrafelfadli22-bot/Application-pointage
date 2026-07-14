@@ -18,7 +18,7 @@ const billingLabels: Record<string, string> = {
 };
 
 const locationLabels: Record<string, string> = {
-  SITE: 'Chantier',
+  SITE: 'Site',
   OFFICE: 'Bureau',
   HOME: 'Domicile',
   TRAVEL: 'Deplacement',
@@ -271,7 +271,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
       (row) => !row.taskName.trim() || !row.activity || (row.workLocation === 'SITE' && !row.siteId),
     );
     if (invalidRow) {
-      return 'Chaque ligne doit avoir un type de tache, un chantier et une description.';
+      return 'Chaque ligne doit avoir un type de tache, un site et une description.';
     }
 
     const totalHours = rows.reduce(
@@ -462,7 +462,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
           <thead>
             <tr className="bg-grayCard">
               <th className="border-b border-borderSoft px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">Projet</th>
-              <th className="border-b border-borderSoft px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">Chantier</th>
+              <th className="border-b border-borderSoft px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">Site</th>
               <th className="border-b border-borderSoft px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">Type</th>
               <th className="border-b border-borderSoft px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">Description</th>
               <th className="border-b border-borderSoft px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">Fact.</th>
@@ -548,7 +548,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                         value={row.siteId}
                         onChange={(event) => setSite(rowIndex, event.target.value)}
                       >
-                        <option value="">Chantier</option>
+                        <option value="">Site</option>
                         {siteOptions.map((site) => (
                           <option key={site.id} value={site.id}>
                             {site.code} - {site.name}

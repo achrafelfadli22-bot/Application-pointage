@@ -21,20 +21,20 @@ import { Pointage360Logo } from '@/components/landing/pointage360-logo';
 export const metadata: Metadata = {
   title: 'Pointage360 - SaaS pointage GPS, feuilles de temps et RH terrain',
   description:
-    'Pointage360 centralise le pointage GPS, les feuilles de temps, les conges, le planning, les chantiers et les rapports RH/paie.',
+    'Pointage360 centralise le pointage GPS, les feuilles de temps, les conges, le planning, les sites et les rapports RH/paie.',
 };
 
 const modules = [
   {
     icon: MapPinned,
     title: 'Pointage GPS',
-    text: 'Check-in et check-out mobiles avec perimetre chantier, statut journalier et suivi des anomalies.',
+    text: 'Check-in et check-out mobiles avec perimetre site, statut journalier et suivi des anomalies.',
     benefit: 'Controle terrain fiable',
   },
   {
     icon: FileSpreadsheet,
     title: 'Feuilles de temps',
-    text: 'Saisie des heures par projet, chantier et type de tache, avec soumission et validation.',
+    text: 'Saisie des heures par projet, site et type de tache, avec soumission et validation.',
     benefit: 'Heures structurees',
   },
   {
@@ -51,14 +51,14 @@ const modules = [
   },
   {
     icon: Building2,
-    title: 'Chantiers & projets',
+    title: 'Sites & projets',
     text: 'Affectations, equipes, activite et reporting par site pour piloter les operations terrain.',
     benefit: 'Pilotage par site',
   },
   {
     icon: BarChart3,
     title: 'Rapports & paie',
-    text: 'Exports Excel, heures par chantier, anomalies GPS et donnees pretes pour la paie.',
+    text: 'Exports Excel, heures par site, anomalies GPS et donnees pretes pour la paie.',
     benefit: 'Decision rapide',
   },
 ];
@@ -82,7 +82,7 @@ const profiles = [
   {
     icon: ShieldCheck,
     title: 'Direction',
-    text: 'Elle dispose d indicateurs fiables sur les presences, les chantiers et les couts operationnels.',
+    text: 'Elle dispose d indicateurs fiables sur les presences, les sites et les couts operationnels.',
   },
 ];
 
@@ -251,7 +251,7 @@ export default function Pointage360LandingPage() {
           <div className="max-w-3xl">
             <SectionLabel>Modules produit</SectionLabel>
             <h2 className="mt-3 text-3xl font-semibold text-navy sm:text-4xl">
-              Tout le cycle temps, chantier et validation dans une seule plateforme.
+              Tout le cycle temps, site et validation dans une seule plateforme.
             </h2>
           </div>
           <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -277,10 +277,10 @@ export default function Pointage360LandingPage() {
               Un pointage mobile adapte aux equipes terrain.
             </h2>
             <p className="mt-5 text-base leading-7 text-mutedText">
-              Les collaborateurs pointent depuis leur telephone, dans le perimetre du chantier, avec un statut journalier clair pour eux et pour leurs managers.
+              Les collaborateurs pointent depuis leur telephone, dans le perimetre du site, avec un statut journalier clair pour eux et pour leurs managers.
             </p>
             <div className="mt-7 grid gap-3">
-              {['Check-in et check-out mobile', 'Perimetre GPS par chantier', 'Retards, absences et anomalies visibles'].map((item) => (
+              {['Check-in et check-out mobile', 'Perimetre GPS par site', 'Retards, absences et anomalies visibles'].map((item) => (
                 <div key={item} className="flex items-center gap-3 text-sm text-bodyText">
                   <Clock3 className="h-4 w-4 text-accent" />
                   <span>{item}</span>
@@ -288,7 +288,7 @@ export default function Pointage360LandingPage() {
               ))}
             </div>
           </div>
-          <ProductImage src="/images/pointage360/pointage360-gps-field.png" alt="Pointage GPS sur chantier" />
+          <ProductImage src="/images/pointage360/pointage360-gps-field.png" alt="Pointage GPS sur site" />
         </div>
       </section>
 
@@ -320,13 +320,13 @@ export default function Pointage360LandingPage() {
           <div>
             <SectionLabel>Feuilles de temps</SectionLabel>
             <h2 className="mt-3 text-3xl font-semibold text-navy sm:text-4xl">
-              Des heures par projet, chantier et jour, sans tableur disperse.
+              Des heures par projet, site et jour, sans tableur disperse.
             </h2>
             <p className="mt-5 text-base leading-7 text-mutedText">
               Les feuilles de temps structurent la saisie, verrouillent les periodes standards et accelerent la validation avant reporting.
             </p>
             <div className="mt-7 grid gap-3">
-              {['Saisie hebdomadaire ou mensuelle', 'Lignes par chantier et type de tache', 'Soumission, rejet, reouverture et validation'].map((item) => (
+              {['Saisie hebdomadaire ou mensuelle', 'Lignes par site et type de tache', 'Soumission, rejet, reouverture et validation'].map((item) => (
                 <div key={item} className="flex items-center gap-3 text-sm text-bodyText">
                   <FileSpreadsheet className="h-4 w-4 text-accent" />
                   <span>{item}</span>
@@ -350,7 +350,7 @@ export default function Pointage360LandingPage() {
               Pointage360 consolide les heures, les anomalies GPS, les absences et les validations pour produire des exports fiables.
             </p>
             <div className="mt-7 grid gap-3">
-              {['Exports Excel', 'Heures par chantier et par employe', 'Anomalies GPS et donnees de paie'].map((item) => (
+              {['Exports Excel', 'Heures par site et par employe', 'Anomalies GPS et donnees de paie'].map((item) => (
                 <div key={item} className="flex items-center gap-3 text-sm text-bodyText">
                   <BarChart3 className="h-4 w-4 text-accent" />
                   <span>{item}</span>
@@ -402,7 +402,7 @@ export default function Pointage360LandingPage() {
             Pret a structurer votre pointage terrain ?
           </h2>
           <p className="mt-5 text-base leading-7 text-mutedText">
-            Demandez une demonstration et voyez comment Pointage360 peut organiser le temps, les chantiers et les validations de vos equipes.
+            Demandez une demonstration et voyez comment Pointage360 peut organiser le temps, les sites et les validations de vos equipes.
           </p>
           <div className="mt-8 flex flex-col justify-center gap-3 sm:flex-row">
             <PrimaryCta href="mailto:contact@futura-expert.com?subject=Demande%20de%20demo%20Pointage360">

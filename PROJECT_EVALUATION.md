@@ -143,7 +143,7 @@ Pointage360 is a **well-structured, production-oriented SaaS platform** for cons
 | **User Management** | Complete | CRUD, role assignment, soft delete |
 | **Employee Profiles** | Complete | Employee number, job title, contract, hire date, leave balance, hourly rate |
 | **Projects** | Complete | CRUD, project manager assignment, status tracking |
-| **Sites (Chantiers)** | Complete | CRUD, GPS coordinates, radius, manager assignment, progress tracking |
+| **Sites (Sites)** | Complete | CRUD, GPS coordinates, radius, manager assignment, progress tracking |
 | **Site Assignments** | Complete | Employee↔Site assignments with date ranges and roles |
 | **Attendance (Pointage)** | Complete | Check-in/out, GPS validation, work location, anomaly detection, approval workflow |
 | **Timesheets** | Complete | Period-based, lines + daily entries, billable/non-billable, submission/approval/rejection/reopen workflow, calendar events (holidays + leaves) |

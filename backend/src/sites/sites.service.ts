@@ -172,10 +172,10 @@ export class SitesService {
       throw new BadRequestException('End date must be after start date');
     }
 
-    // Un chef de chantier est déjà implicitement affecté à son site — pas besoin d'une affectation resource séparée
+    // Un chef de site est déjà implicitement affecté à son site — pas besoin d'une affectation resource séparée
     if (site.managerId === dto.userId) {
       throw new BadRequestException(
-        'Ce membre est déjà chef de chantier de ce site. Il est implicitement affecté en tant que responsable et n\'a pas besoin d\'une affectation ressource supplémentaire.',
+        'Ce membre est déjà chef de site de ce site. Il est implicitement affecté en tant que responsable et n\'a pas besoin d\'une affectation ressource supplémentaire.',
       );
     }
 

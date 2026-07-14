@@ -73,7 +73,7 @@ const demoLeaveTypes: LeaveType[] = [
 
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
 
-const TABS = ['Societe', 'Jours feries', 'Types de conges', 'Types timesheet', 'Chantiers', 'Pointage'] as const;
+const TABS = ['Societe', 'Jours feries', 'Types de conges', 'Types timesheet', 'Sites', 'Pointage'] as const;
 type Tab = (typeof TABS)[number];
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
@@ -607,7 +607,7 @@ const defaultSiteRoleOptions = [
   'Aide electricien',
   'Controle qualite',
   'HSE',
-  'Administratif chantier',
+  'Administratif site',
 ];
 
 const defaultJobTitleOptions = [
@@ -623,7 +623,7 @@ const defaultJobTitleOptions = [
 
 const optionImportHeaders: Record<OptionImportKind, string[]> = {
   client: ['client', 'maitre ouvrage', 'maitre d ouvrage', 'maitre_ouvrage', 'donneur ordre'],
-  siteRole: ['role', 'role chantier', 'poste chantier', 'poste sur chantier', 'fonction chantier'],
+  siteRole: ['role', 'role site', 'poste site', 'poste sur site', 'fonction site'],
   jobTitle: ['poste', 'poste employe', 'fonction', 'emploi', 'job title'],
 };
 
@@ -852,7 +852,7 @@ function TimesheetTaskTypesTab() {
     downloadExcelTemplate('modele-types-tache-timesheet.xlsx', 'Types tache', [
       { Code: 'EXECUTION', Libelle: 'Execution travaux', Statut: 'Actif' },
       { Code: 'PREPARATION', Libelle: 'Preparation', Statut: 'Actif' },
-      { Code: 'REUNION_CHANTIER', Libelle: 'Reunion chantier', Statut: 'Actif' },
+      { Code: 'REUNION_CHANTIER', Libelle: 'Reunion site', Statut: 'Actif' },
     ]);
   }
 
@@ -1225,10 +1225,10 @@ function SiteOptionsTab() {
     }
 
     if (kind === 'siteRole') {
-      downloadExcelTemplate('modele-postes-chantier.xlsx', 'Postes chantier', [
-        { 'Poste chantier': 'Chef de site' },
-        { 'Poste chantier': 'Chef d equipe' },
-        { 'Poste chantier': 'Technicien' },
+      downloadExcelTemplate('modele-postes-site.xlsx', 'Postes site', [
+        { 'Poste site': 'Chef de site' },
+        { 'Poste site': 'Chef d equipe' },
+        { 'Poste site': 'Technicien' },
       ]);
       return;
     }
@@ -1349,7 +1349,7 @@ function SiteOptionsTab() {
       <div className="grid gap-4 xl:grid-cols-3">
         {renderOptionGroup("Clients / Maitres d'ouvrage", clientOptions, clientInput, setClientInput, 'client')}
         {renderOptionGroup('Postes employes', jobTitleOptions, jobTitleInput, setJobTitleInput, 'jobTitle')}
-        {renderOptionGroup('Postes sur chantier', siteRoleOptions, siteRoleInput, setSiteRoleInput, 'siteRole')}
+        {renderOptionGroup('Postes sur site', siteRoleOptions, siteRoleInput, setSiteRoleInput, 'siteRole')}
       </div>
 
       <div className="flex items-center gap-3">
@@ -1454,7 +1454,7 @@ function AttendanceSettingsTab() {
         {/* Tolérance GPS */}
         <label className="grid gap-1">
           <span className="text-sm font-semibold text-bodyText">Tolérance GPS par défaut (mètres)</span>
-          <span className="text-xs text-mutedText">Rayon maximal autorisé depuis l'emplacement du chantier.</span>
+          <span className="text-xs text-mutedText">Rayon maximal autorisé depuis l'emplacement du site.</span>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -1519,7 +1519,7 @@ export default function SettingsPage() {
       <div className="grid gap-6">
         <PageHeader
           title="Paramètres"
-          description="Paramétrage tenant, jours fériés, types de congés, types timesheet, chantiers et règles de pointage."
+          description="Paramétrage tenant, jours fériés, types de congés, types timesheet, sites et règles de pointage."
         />
         <div className="border border-borderSoft bg-surface shadow-card">
           <TabBar active={tab} onChange={setTab} />
@@ -1528,7 +1528,7 @@ export default function SettingsPage() {
             {tab === 'Jours feries' && <HolidaysTab />}
             {tab === 'Types de conges' && <LeaveTypesTab />}
             {tab === 'Types timesheet' && <TimesheetTaskTypesTab />}
-            {tab === 'Chantiers' && <SiteOptionsTab />}
+            {tab === 'Sites' && <SiteOptionsTab />}
             {tab === 'Pointage' && <AttendanceSettingsTab />}
           </div>
         </div>

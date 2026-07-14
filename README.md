@@ -1,8 +1,8 @@
 # Pointage360
 
-Pointage360 est une plateforme SaaS B2B multi-tenant pour gerer le pointage entree/sortie, les timesheets, les conges, la presence par chantier, les validations manager/RH et les rapports RH/paie.
+Pointage360 est une plateforme SaaS B2B multi-tenant pour gerer le pointage entree/sortie, les timesheets, les conges, la presence par site, les validations manager/RH et les rapports RH/paie.
 
-Le projet est concu comme un pilote interne pouvant evoluer vers un vrai produit vendable a plusieurs societes clientes ayant des chantiers.
+Le projet est concu comme un pilote interne pouvant evoluer vers un vrai produit vendable a plusieurs societes clientes ayant des sites.
 
 ## Stack
 
@@ -107,9 +107,9 @@ Mot de passe pour tous: `Password123!`
 ## Roles
 
 - `SUPER_ADMIN`: gere tenants, abonnements et statistiques globales
-- `TENANT_ADMIN`: gere sa societe, utilisateurs, employes, chantiers, settings et rapports
+- `TENANT_ADMIN`: gere sa societe, utilisateurs, employes, sites, settings et rapports
 - `HR`: gere employes, conges et exports RH/paie
-- `MANAGER`: valide pointages, timesheets, conges equipe et consulte ses chantiers
+- `MANAGER`: valide pointages, timesheets, conges equipe et consulte ses sites
 - `EMPLOYEE`: pointe, remplit sa timesheet, demande un conge et consulte ses donnees
 
 ## Multi-tenant
@@ -174,7 +174,7 @@ Le seed cree:
 - sites CH-001 a CH-005
 - comptes de test
 - 15 employes supplementaires
-- affectations chantiers
+- affectations sites
 - pointages de la semaine
 - timesheets et lignes
 - types de conges Maroc

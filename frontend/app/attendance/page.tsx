@@ -38,7 +38,7 @@ type Punch = {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const WORK_LOCATION_LABELS: Record<string, string> = {
-  SITE: 'Chantier', OFFICE: 'Bureau', HOME: 'Domicile', TRAVEL: 'Déplacement',
+  SITE: 'Site', OFFICE: 'Bureau', HOME: 'Domicile', TRAVEL: 'Déplacement',
 };
 
 const MANAGER_ROLES = ['RESOURCE_MANAGER', 'HR', 'PROJECT_MANAGER', 'MANAGER'];
@@ -108,7 +108,7 @@ export default function AttendancePage() {
       ),
     },
     {
-      header: 'Chantier',
+      header: 'Site',
       cell: ({ row }) => row.original.site
         ? (
           <span className="flex items-center gap-1 text-sm text-mutedText">

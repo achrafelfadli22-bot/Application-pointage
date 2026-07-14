@@ -164,7 +164,7 @@ export default function ProjectsPage() {
     { header: 'Projet', accessorKey: 'name' },
     { header: 'Client', cell: ({ row }) => row.original.clientName ?? '-' },
     { header: 'Chef de projet', cell: ({ row }) => `${row.original.projectManager.firstName} ${row.original.projectManager.lastName}` },
-    { header: 'Chantiers', cell: ({ row }) => row.original._count.sites },
+    { header: 'Sites', cell: ({ row }) => row.original._count.sites },
     { header: 'Statut', cell: ({ row }) => <StatusBadge status={row.original.status} /> },
     {
       header: 'Actions',
@@ -181,7 +181,7 @@ export default function ProjectsPage() {
       <div className="grid gap-6">
         <PageHeader
           title="Projets"
-          description="Designation du chef de projet et rattachement des chantiers."
+          description="Designation du chef de projet et rattachement des sites."
           actions={canCreate ? <NewProjectModal onCreated={refresh} clientOptions={clientOptions} /> : undefined}
         />
 

@@ -113,7 +113,7 @@ function PlanModal({
               {field('name', 'Nom du plan *', 'text', 'ex: Pro')}
               {field('priceMonthly', 'Prix mensuel (MAD) *', 'number', 'ex: 149')}
               {field('maxUsers', 'Utilisateurs max *', 'number', 'ex: 250')}
-              {field('maxSites', 'Chantiers max *', 'number', 'ex: 50')}
+              {field('maxSites', 'Sites max *', 'number', 'ex: 50')}
             </div>
             {field('features', 'Fonctionnalités (séparées par virgule)', 'text', 'ex: GPS, Rapports, Export paie')}
             {error && <p className="text-sm text-dangerText">{error}</p>}
@@ -140,7 +140,7 @@ export default function AdminSubscriptionsPage() {
   const columns: ColumnDef<Plan, unknown>[] = [
     { header: 'Plan',             accessorKey: 'name' },
     { header: 'Utilisateurs max', accessorKey: 'maxUsers' },
-    { header: 'Chantiers max',    accessorKey: 'maxSites' },
+    { header: 'Sites max',    accessorKey: 'maxSites' },
     { header: 'Prix mensuel',     cell: ({ row }) => `${row.original.priceMonthly} MAD` },
     { header: 'Sociétés',         cell: ({ row }) => row.original._count.tenants },
     {

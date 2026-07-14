@@ -30,7 +30,7 @@ export function Sidebar() {
         </div>
         <div>
           <div className="text-sm font-semibold text-bodyText">Pointage360</div>
-          <div className="text-[10px] font-medium text-mutedText">Gestion RH & Chantiers</div>
+          <div className="text-[10px] font-medium text-mutedText">Gestion RH & Sites</div>
         </div>
       </div>
 

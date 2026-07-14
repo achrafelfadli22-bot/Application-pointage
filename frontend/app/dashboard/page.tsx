@@ -547,7 +547,7 @@ function AdminDashboard() {
 
   const punchColumns: ColumnDef<AdminPunch, unknown>[] = [
     { header: 'Employé',  cell: ({ row }) => { const u = row.original.user as { firstName: string; lastName: string }; return `${u.firstName} ${u.lastName}`; } },
-    { header: 'Chantier', cell: ({ row }) => { const s = row.original.site as { name: string } | null; return s?.name ?? '—'; } },
+    { header: 'Site', cell: ({ row }) => { const s = row.original.site as { name: string } | null; return s?.name ?? '—'; } },
     { header: 'Date',     cell: ({ row }) => new Date(row.original.punchDate as string).toLocaleDateString('fr-FR') },
     { header: 'Entrée',   cell: ({ row }) => row.original.checkInAt ? new Date(row.original.checkInAt as string).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : '—' },
     { header: 'Statut',   cell: ({ row }) => <StatusBadge status={row.original.status as string} /> },
@@ -682,7 +682,7 @@ function AdminDashboard() {
               href="/time-off/requests"
             />
             <KpiCard
-              label="Chantiers actifs"
+              label="Sites actifs"
               value={data.counters.activeSites}
               icon={Building2}
               accent="neutral"

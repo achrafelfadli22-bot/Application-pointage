@@ -28,9 +28,9 @@ export class ReportsController {
 
   @Get('site-workload')
   @ApiOperation({
-    summary: 'Charge par chantier / projet',
+    summary: 'Charge par site / projet',
     description:
-      'Heures timesheets approuvées par chantier : heures facturables vs internes, headcount, taux de facturation, anomalies GPS.',
+      'Heures timesheets approuvées par site : heures facturables vs internes, headcount, taux de facturation, anomalies GPS.',
   })
   siteWorkload(@CurrentUser() user: CurrentUserContext, @Query() filters: ReportFilterDto) {
     return this.service.siteWorkload(user, filters);
@@ -91,7 +91,7 @@ export class ReportsController {
   }
 
   @Get('hours-by-site')
-  @ApiOperation({ summary: 'Heures totales agrégées par chantier' })
+  @ApiOperation({ summary: 'Heures totales agrégées par site' })
   hoursBySite(@CurrentUser() user: CurrentUserContext, @Query() filters: ReportFilterDto) {
     return this.service.hoursBySite(user, filters);
   }

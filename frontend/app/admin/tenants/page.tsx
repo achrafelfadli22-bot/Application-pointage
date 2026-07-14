@@ -170,7 +170,7 @@ export default function AdminTenantsPage() {
     { header: 'Abonnement',    cell: ({ row }) => row.original.subscriptionPlan?.name ?? '—' },
     { header: 'Resource Manager', cell: ({ row }) => resourceManagerLabel(row.original) },
     { header: 'Utilisateurs',  cell: ({ row }) => row.original._count.users },
-    { header: 'Chantiers',     cell: ({ row }) => row.original._count.sites },
+    { header: 'Sites',     cell: ({ row }) => row.original._count.sites },
     { header: 'Statut',        cell: ({ row }) => <StatusBadge status={row.original.status} /> },
     {
       header: 'Actions',
@@ -232,7 +232,7 @@ export default function AdminTenantsPage() {
           actions={<CreateResourceManagerModal tenants={data} onCreated={refresh} />}
         />
         <div className="rounded-xl border border-accent/20 bg-accentLight/40 px-4 py-3 text-sm text-accentText">
-          L'isolation est appliquee par tenant : utilisateurs, projets, chantiers, timesheets, conges et exports restent rattaches a la base tenant de leur societe.
+          L'isolation est appliquee par tenant : utilisateurs, projets, sites, timesheets, conges et exports restent rattaches a la base tenant de leur societe.
         </div>
         {actionError && (
           <div className="rounded-lg border border-dangerBorder bg-dangerBg px-4 py-3 text-sm text-dangerText">

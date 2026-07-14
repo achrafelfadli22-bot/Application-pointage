@@ -79,7 +79,7 @@ export function SiteMap({ latitude, longitude, gpsRadiusMeters, siteName, punche
       });
       L.marker([latitude, longitude], { icon: siteIcon })
         .addTo(map)
-        .bindPopup(`<strong>${siteName}</strong><br>Centre du chantier<br>Rayon : ${gpsRadiusMeters} m`);
+        .bindPopup(`<strong>${siteName}</strong><br>Centre du site<br>Rayon : ${gpsRadiusMeters} m`);
 
       // Punch markers
       for (const punch of punches) {
@@ -151,7 +151,7 @@ export function SiteMap({ latitude, longitude, gpsRadiusMeters, siteName, punche
     <div
       ref={mapRef}
       style={{ height: '360px', width: '100%', borderRadius: '8px', zIndex: 0 }}
-      aria-label={`Carte du chantier ${siteName}`}
+      aria-label={`Carte du site ${siteName}`}
     />
   );
 }

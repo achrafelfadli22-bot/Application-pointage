@@ -68,7 +68,7 @@ export default function LoginPage() {
           </div>
           <div className="text-center">
             <h1 className="text-xl font-semibold text-bodyText">Pointage360</h1>
-            <p className="text-sm text-mutedText">Gestion RH &amp; Chantiers</p>
+            <p className="text-sm text-mutedText">Gestion RH &amp; Sites</p>
           </div>
         </div>
 

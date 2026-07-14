@@ -228,7 +228,7 @@ function EditEmployeeModal({
                 <option value="FREELANCE">Freelance</option>
               </SelectField>
               <DateField label="Date d'embauche" value={form.hireDate} onChange={(event) => patch('hireDate', event.target.value)} />
-              <SelectField label="Chantier principal" value={form.mainSiteId} onChange={(event) => patch('mainSiteId', event.target.value)}>
+              <SelectField label="Site principal" value={form.mainSiteId} onChange={(event) => patch('mainSiteId', event.target.value)}>
                 <option value="">Aucun</option>
                 {sites.map((site) => (
                   <option key={site.id} value={site.id}>
@@ -331,7 +331,7 @@ export default function EmployeeDetailPage() {
       cell: ({ row }) => new Date(row.original.punchDate).toLocaleDateString('fr-FR'),
     },
     {
-      header: 'Chantier',
+      header: 'Site',
       cell: ({ row }) => row.original.site?.name ?? '—',
     },
     {
@@ -454,7 +454,7 @@ export default function EmployeeDetailPage() {
               value={employee.hireDate ? new Date(employee.hireDate).toLocaleDateString('fr-FR') : '—'}
             />
             <InfoRow
-              label="Chantier principal"
+              label="Site principal"
               value={
                 employee.mainSite ? (
                   <Link href={`/sites/${employee.mainSite.id}`} className="text-accent hover:underline">

@@ -156,7 +156,7 @@ export class ReportsProcessor extends WorkerHost {
       if (!bySite.has(key)) {
         bySite.set(key, {
           code: line.site?.code ?? '',
-          name: line.site?.name ?? '(Sans chantier)',
+          name: line.site?.name ?? '(Sans site)',
           total_hours: 0,
           billable_hours: 0,
         });

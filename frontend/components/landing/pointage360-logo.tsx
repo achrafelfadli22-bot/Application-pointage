@@ -49,7 +49,7 @@ export function Pointage360Logo({
         <div className="leading-none">
           <div className={cn('text-xl font-semibold tracking-normal', textColor)}>Pointage360</div>
           <div className={cn('mt-1 text-[11px] font-semibold uppercase tracking-[0.16em]', subColor)}>
-            Temps et chantiers
+            Temps et sites
           </div>
         </div>
       ) : null}
