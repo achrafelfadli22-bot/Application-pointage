@@ -3,7 +3,7 @@ import {
   CalendarClock,
   CalendarRange,
   ClipboardList,
-  Clock4,
+  //Clock4,
   CreditCard,
   FolderKanban,
   HardHat,
@@ -28,7 +28,7 @@ export type NavItem = {
 export const NAV_ITEMS: readonly NavItem[] = [
   // ── Opérationnel ────────────────────────────────────────────────────────────
   { label: 'Tableau de bord',   href: '/dashboard',            icon: LayoutDashboard, roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
-  { label: 'Pointage',          href: '/attendance',            icon: Clock4,          roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
+  //{ label: 'Pointage',          href: '/attendance',            icon: Clock4,          roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
   { label: 'Feuilles de temps', href: '/timesheets',            icon: ClipboardList,   roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
   { label: 'Congés',            href: '/time-off',              icon: CalendarClock,   roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'], exact: true },
   { label: 'Demandes de congé', href: '/time-off/requests',     icon: ClipboardList,   roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
