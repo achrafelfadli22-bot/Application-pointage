@@ -21,7 +21,7 @@ import { Pointage360Logo } from '@/components/landing/pointage360-logo';
 export const metadata: Metadata = {
   title: 'Pointage360 - SaaS pointage GPS, feuilles de temps et RH terrain',
   description:
-    'Pointage360 centralise le pointage GPS, les feuilles de temps, les conges, le planning, les sites et les rapports RH/paie.',
+    'Pointage360 centralise le pointage GPS, les feuilles de temps, les congés, le planning, les sites et les rapports RH/paie.',
 };
 
 const modules = [
@@ -77,7 +77,7 @@ const profiles = [
   {
     icon: BriefcaseBusiness,
     title: 'RH',
-    text: 'Ils centralisent conges, historiques, validations et exports sans ressaisie manuelle.',
+    text: 'Ils centralisent congés, historiques, validations et exports sans ressaisie manuelle.',
   },
   {
     icon: ShieldCheck,

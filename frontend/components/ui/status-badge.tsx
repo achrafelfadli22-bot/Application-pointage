@@ -6,6 +6,7 @@ const statusConfig: Record<string, { label: string; className: string }> = {
   SUBMITTED:  { label: 'En attente',  className: 'bg-infoBg text-infoText border-infoBorder' },
   Submitted:  { label: 'En attente',  className: 'bg-infoBg text-infoText border-infoBorder' },
   N1_APPROVED: { label: 'Pré-approuvé', className: 'bg-warningBg text-warningText border-warningBorder' },
+  SITE_APPROVED: { label: 'Validé par le chef de site', className: 'bg-warningBg text-warningText border-warningBorder' },
   DRAFT:      { label: 'Brouillon',   className: 'bg-grayCard text-mutedText border-borderSoft' },
   Draft:      { label: 'Brouillon',   className: 'bg-grayCard text-mutedText border-borderSoft' },
   REJECTED:   { label: 'Refusé',      className: 'bg-dangerBg text-dangerText border-dangerBorder' },

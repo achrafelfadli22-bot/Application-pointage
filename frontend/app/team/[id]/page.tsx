@@ -242,7 +242,7 @@ function EditEmployeeModal({
                 <option value="SUSPENDED">Suspendu</option>
               </SelectField>
               <FormField
-                label="Solde conges annuel (jours)"
+                label="Solde congés annuel (jours)"
                 type="number"
                 min={0}
                 value={form.annualLeaveBalance}

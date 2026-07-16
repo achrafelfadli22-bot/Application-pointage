@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
-import { Prisma, TimesheetStatus, UserRole, WorkLocation } from '@prisma/client';
+import { Prisma, TimesheetLineStatus, TimesheetStatus, UserRole, WorkLocation } from '@prisma/client';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { HierarchyService } from '../common/hierarchy.service';
 import { CurrentUserContext } from '../common/types';
@@ -68,7 +68,15 @@ export class TimesheetsService {
         rejectedBy: { select: { id: true, firstName: true, lastName: true } },
         lines: {
           include: {
-            site: { select: { id: true, code: true, name: true, project: { select: { id: true, code: true, name: true } } } },
+            site: {
+              select: {
+                id: true,
+                code: true,
+                name: true,
+                managerId: true,
+                project: { select: { id: true, code: true, name: true, projectManagerId: true } },
+              },
+            },
             entries: { orderBy: { entryDate: 'asc' } },
           },
           orderBy: { createdAt: 'asc' },
@@ -78,9 +86,14 @@ export class TimesheetsService {
 
     return {
       ...timesheet,
+      lines: timesheet.lines.map((line) => ({
+        ...line,
+        approvalPermissions: this.lineApprovalPermissions(user, timesheet.userId, line),
+      })),
       calendarEvents: await this.calendarEventsFor(timesheet),
       permissions: {
         canEdit: await this.canUpdateTimesheet(user, timesheet),
+        ...this.globalApprovalPermissions(user, timesheet),
       },
     };
   }
@@ -88,17 +101,62 @@ export class TimesheetsService {
   async update(user: CurrentUserContext, id: string, dto: UpdateTimesheetDto) {
     const timesheet = await this.repository.findFirstOrThrow({
       where: { id, ...(await this.scope(user)) },
-      include: { lines: true },
+      include: {
+        user: { select: { role: true } },
+        lines: { include: { site: { include: { project: true } } } },
+      },
     });
 
     if (!(await this.canUpdateTimesheet(user, timesheet))) {
       throw new ForbiddenException('Vous ne pouvez pas modifier cette feuille de temps dans son etat actuel.');
     }
 
+    const replaceWholeSheet =
+      (timesheet.status === TimesheetStatus.DRAFT || timesheet.status === TimesheetStatus.REOPENED) &&
+      timesheet.userId === user.userId;
+
     await this.repository.transaction(async (tx) => {
-      await this.repository.deleteLines(tx, id);
+      if (replaceWholeSheet) {
+        await this.repository.deleteLines(tx, id);
+        for (const line of dto.lines) {
+          await this.createLineWithEntries(tx, timesheet.tenantId, id, line);
+        }
+        return;
+      }
+
       for (const line of dto.lines) {
-        await this.createLineWithEntries(tx, timesheet.tenantId, id, line);
+        if (!line.id) continue;
+        const existing = timesheet.lines.find((item) => item.id === line.id);
+        if (!existing) continue;
+        const permission = this.lineApprovalPermissions(user, timesheet.userId, existing);
+        if (!permission.canEdit) continue;
+        if ((line.siteId ?? null) !== existing.siteId) {
+          throw new ForbiddenException("Un validateur ne peut pas changer le site d'une ligne.");
+        }
+
+        await this.repository.updateLineInTransaction(tx, existing.id, {
+          taskName: line.taskName,
+          billingType: line.billingType,
+          activity: line.activity,
+          workLocation: line.workLocation,
+          placeOfWork: line.placeOfWork,
+          approvalStatus:
+            existing.approvalStatus === TimesheetLineStatus.REJECTED
+              ? TimesheetLineStatus.SUBMITTED
+              : existing.approvalStatus,
+          rejectionReason: existing.approvalStatus === TimesheetLineStatus.REJECTED ? null : existing.rejectionReason,
+          rejectedById: existing.approvalStatus === TimesheetLineStatus.REJECTED ? null : existing.rejectedById,
+          rejectedAt: existing.approvalStatus === TimesheetLineStatus.REJECTED ? null : existing.rejectedAt,
+          entries: {
+            deleteMany: {},
+            create: line.entries.map((entry) => ({
+              tenantId: timesheet.tenantId,
+              entryDate: new Date(entry.entryDate),
+              hours: entry.hours,
+              comment: entry.comment,
+            })),
+          },
+        });
       }
     });
 
@@ -116,6 +174,7 @@ export class TimesheetsService {
   private async canUpdateTimesheet(
     user: CurrentUserContext,
     timesheet: {
+      id: string;
       tenantId: string;
       userId: string;
       status: TimesheetStatus;
@@ -136,19 +195,17 @@ export class TimesheetsService {
       );
     }
 
-    if (timesheet.status === TimesheetStatus.SUBMITTED) {
-      if (timesheet.userId === user.userId) {
-        return false;
-      }
-
-      const level = await this.hierarchy.approvalLevelFor(
-        user,
-        timesheet.tenantId,
-        timesheet.userId,
-        timesheet.lines.map((line) => line.siteId),
-      );
-
-      return level === 'N1' || level === 'BOTH';
+    if (
+      timesheet.status === TimesheetStatus.SUBMITTED ||
+      timesheet.status === TimesheetStatus.N1_APPROVED ||
+      timesheet.status === TimesheetStatus.REJECTED
+    ) {
+      if (timesheet.userId === user.userId) return false;
+      const detailed = await this.repository.findFirstOrThrow({
+        where: { id: timesheet.id },
+        include: { lines: { include: { site: { include: { project: true } } } } },
+      });
+      return detailed.lines.some((line) => this.lineApprovalPermissions(user, timesheet.userId, line).canEdit);
     }
 
     return false;
@@ -199,12 +256,127 @@ export class TimesheetsService {
     return this.transition(user, id, TimesheetStatus.SUBMITTED, 'timesheet.submitted');
   }
 
-  approve(user: CurrentUserContext, id: string) {
-    return this.transition(user, id, TimesheetStatus.APPROVED, 'timesheet.approved');
+  async approve(user: CurrentUserContext, id: string) {
+    const timesheet = await this.timesheetForGlobalDecision(user, id);
+    const permissions = this.globalApprovalPermissions(user, timesheet);
+    if (!permissions.canApproveGlobal) {
+      throw new ForbiddenException("Aucune ligne de votre perimetre n'est prete a etre validee.");
+    }
+
+    const scopedLines = timesheet.lines.filter((line) =>
+      user.role === UserRole.MANAGER
+        ? line.site?.managerId === user.userId &&
+          line.approvalStatus === TimesheetLineStatus.SUBMITTED
+        : line.site?.project?.projectManagerId === user.userId &&
+          line.approvalStatus === TimesheetLineStatus.SITE_APPROVED,
+    );
+    const nextStatus =
+      user.role === UserRole.MANAGER ? TimesheetLineStatus.SITE_APPROVED : TimesheetLineStatus.APPROVED;
+
+    for (const line of scopedLines) {
+      await this.repository.updateLine({
+        where: { id: line.id },
+        data:
+          user.role === UserRole.MANAGER
+            ? {
+                approvalStatus: nextStatus,
+                siteApprovedById: user.userId,
+                siteApprovedAt: new Date(),
+                rejectionReason: null,
+                rejectedById: null,
+                rejectedAt: null,
+              }
+            : { approvalStatus: nextStatus, projectApprovedById: user.userId, projectApprovedAt: new Date() },
+      });
+      await this.recordLineDecision(user, timesheet, line.id, line.approvalStatus, nextStatus);
+    }
+
+    await this.refreshAggregateStatus(id);
+    return this.findOne(user, id);
   }
 
-  reject(user: CurrentUserContext, id: string, reason: string) {
-    return this.transition(user, id, TimesheetStatus.REJECTED, 'timesheet.rejected', reason);
+  async approveLine(user: CurrentUserContext, id: string, lineId: string) {
+    const timesheet = await this.timesheetForLineDecision(user, id, lineId);
+    const line = timesheet.lines[0]!;
+    const permissions = this.lineApprovalPermissions(user, timesheet.userId, line);
+
+    if (!permissions.canApprove) {
+      throw new ForbiddenException('Vous ne pouvez pas valider cette ligne ou elle ne correspond pas a votre perimetre.');
+    }
+
+    const nextStatus =
+      user.role === UserRole.MANAGER ? TimesheetLineStatus.SITE_APPROVED : TimesheetLineStatus.APPROVED;
+    await this.repository.updateLine({
+      where: { id: lineId },
+      data:
+        user.role === UserRole.MANAGER
+          ? { approvalStatus: nextStatus, siteApprovedById: user.userId, siteApprovedAt: new Date() }
+          : { approvalStatus: nextStatus, projectApprovedById: user.userId, projectApprovedAt: new Date() },
+    });
+
+    await this.recordLineDecision(user, timesheet, lineId, line.approvalStatus, nextStatus);
+    await this.refreshAggregateStatus(id);
+    return this.findOne(user, id);
+  }
+
+  async rejectLine(user: CurrentUserContext, id: string, lineId: string, reason: string) {
+    const timesheet = await this.timesheetForLineDecision(user, id, lineId);
+    const line = timesheet.lines[0]!;
+    const permissions = this.lineApprovalPermissions(user, timesheet.userId, line);
+
+    if (!permissions.canReject) {
+      throw new ForbiddenException('Vous ne pouvez pas rejeter cette ligne ou elle ne correspond pas a votre perimetre.');
+    }
+
+    await this.repository.updateLine({
+      where: { id: lineId },
+      data: {
+        approvalStatus: TimesheetLineStatus.REJECTED,
+        rejectedById: user.userId,
+        rejectedAt: new Date(),
+        rejectionReason: reason,
+      },
+    });
+    await this.recordLineDecision(user, timesheet, lineId, line.approvalStatus, TimesheetLineStatus.REJECTED, reason);
+    await this.refreshAggregateStatus(id);
+    return this.findOne(user, id);
+  }
+
+  async reject(user: CurrentUserContext, id: string, reason: string) {
+    const timesheet = await this.timesheetForGlobalDecision(user, id);
+    const permissions = this.globalApprovalPermissions(user, timesheet);
+    if (!permissions.canRejectGlobal) {
+      throw new ForbiddenException("Vous ne pouvez pas refuser cette feuille de temps.");
+    }
+
+    const scopedLines = timesheet.lines.filter(
+      (line) =>
+        line.site?.project?.projectManagerId === user.userId &&
+        line.approvalStatus === TimesheetLineStatus.SITE_APPROVED,
+    );
+    for (const line of scopedLines) {
+      await this.repository.updateLine({
+        where: { id: line.id },
+        data: {
+          approvalStatus: TimesheetLineStatus.REJECTED,
+          rejectedById: user.userId,
+          rejectedAt: new Date(),
+          rejectionReason: reason,
+          projectApprovedById: null,
+          projectApprovedAt: null,
+        },
+      });
+      await this.recordLineDecision(
+        user,
+        timesheet,
+        line.id,
+        line.approvalStatus,
+        TimesheetLineStatus.REJECTED,
+        reason,
+      );
+    }
+    await this.refreshAggregateStatus(id);
+    return this.findOne(user, id);
   }
 
   reopen(user: CurrentUserContext, id: string) {
@@ -220,7 +392,16 @@ export class TimesheetsService {
   ) {
     const timesheet = await this.repository.findFirstOrThrow({
       where: { id, ...(await this.scope(user)) },
-      include: { user: true, lines: { select: { siteId: true, entries: { select: { hours: true } } } } },
+      include: {
+        user: true,
+        lines: {
+          select: {
+            siteId: true,
+            site: { select: { managerId: true, projectId: true } },
+            entries: { select: { hours: true } },
+          },
+        },
+      },
     });
 
     if (nextStatus === TimesheetStatus.SUBMITTED && timesheet.userId !== user.userId) {
@@ -242,6 +423,14 @@ export class TimesheetsService {
     if (nextStatus === TimesheetStatus.SUBMITTED || nextStatus === TimesheetStatus.APPROVED) {
       this.assertHasWorkEntries(timesheet);
     }
+    if (nextStatus === TimesheetStatus.SUBMITTED) {
+      const invalidLine = timesheet.lines.some((line) => !line.siteId || !line.site?.managerId || !line.site.projectId);
+      if (invalidLine) {
+        throw new BadRequestException(
+          'Chaque ligne doit etre rattachee a un site avec un chef de site et un projet avant soumission.',
+        );
+      }
+    }
 
     const effectiveStatus = await this.resolveApprovalStatus(user, timesheet, nextStatus);
     const effectiveAction = effectiveStatus === TimesheetStatus.N1_APPROVED ? 'timesheet.n1_approved' : action;
@@ -259,6 +448,37 @@ export class TimesheetsService {
       },
       include: { user: true },
     });
+
+    if (effectiveStatus === TimesheetStatus.SUBMITTED) {
+      await this.repository.updateLines({
+        where: { timesheetId: id },
+        data: {
+          approvalStatus: TimesheetLineStatus.SUBMITTED,
+          siteApprovedById: null,
+          siteApprovedAt: null,
+          projectApprovedById: null,
+          projectApprovedAt: null,
+          rejectedById: null,
+          rejectedAt: null,
+          rejectionReason: null,
+        },
+      });
+    }
+    if (effectiveStatus === TimesheetStatus.REOPENED) {
+      await this.repository.updateLines({
+        where: { timesheetId: id },
+        data: {
+          approvalStatus: TimesheetLineStatus.DRAFT,
+          siteApprovedById: null,
+          siteApprovedAt: null,
+          projectApprovedById: null,
+          projectApprovedAt: null,
+          rejectedById: null,
+          rejectedAt: null,
+          rejectionReason: null,
+        },
+      });
+    }
 
     await this.repository.createApprovalAction({
       data: {
@@ -328,6 +548,170 @@ export class TimesheetsService {
             comment: entry.comment,
           })),
         },
+      },
+    });
+  }
+
+  private lineApprovalPermissions(
+    user: CurrentUserContext,
+    ownerId: string,
+    line: {
+      approvalStatus: TimesheetLineStatus;
+      site: { managerId: string | null; project: { projectManagerId: string } | null } | null;
+    },
+  ) {
+    if (ownerId === user.userId || !line.site?.project) {
+      return { canEdit: false, canApprove: false, canReject: false, stage: null };
+    }
+
+    const isSiteManager = user.role === UserRole.MANAGER && line.site.managerId === user.userId;
+    const isProjectManager =
+      user.role === UserRole.PROJECT_MANAGER && line.site.project.projectManagerId === user.userId;
+    const canSiteDecide = isSiteManager && line.approvalStatus === TimesheetLineStatus.SUBMITTED;
+    const canProjectDecide = isProjectManager && line.approvalStatus === TimesheetLineStatus.SITE_APPROVED;
+
+    return {
+      canEdit:
+        (isSiteManager &&
+          (line.approvalStatus === TimesheetLineStatus.SUBMITTED ||
+            line.approvalStatus === TimesheetLineStatus.REJECTED)) ||
+        (isProjectManager && line.approvalStatus === TimesheetLineStatus.SITE_APPROVED),
+      canApprove: canSiteDecide || canProjectDecide,
+      canReject: canSiteDecide || canProjectDecide,
+      stage: canSiteDecide ? 'SITE' : canProjectDecide ? 'PROJECT' : null,
+    };
+  }
+
+  private globalApprovalPermissions(
+    user: CurrentUserContext,
+    timesheet: {
+      userId: string;
+      user: { role: UserRole };
+      lines: Array<{
+        approvalStatus: TimesheetLineStatus;
+        site: { managerId: string | null; project: { projectManagerId: string } | null } | null;
+      }>;
+    },
+  ) {
+    if (timesheet.userId === user.userId) {
+      return { canApproveGlobal: false, canRejectGlobal: false, approvalStage: null };
+    }
+
+    if (user.role === UserRole.MANAGER) {
+      const hasSubmittedLines = timesheet.lines.some(
+        (line) =>
+          line.site?.managerId === user.userId &&
+          line.approvalStatus === TimesheetLineStatus.SUBMITTED,
+      );
+      const hasRejectedLines = timesheet.lines.some(
+        (line) =>
+          line.site?.managerId === user.userId &&
+          line.approvalStatus === TimesheetLineStatus.REJECTED,
+      );
+      return {
+        canApproveGlobal: hasSubmittedLines && !hasRejectedLines,
+        canRejectGlobal: false,
+        approvalStage: hasSubmittedLines && !hasRejectedLines ? 'SITE' : null,
+      };
+    }
+
+    if (user.role === UserRole.PROJECT_MANAGER) {
+      const allSiteValidated =
+        timesheet.lines.length > 0 &&
+        timesheet.lines.every(
+          (line) =>
+            line.approvalStatus === TimesheetLineStatus.SITE_APPROVED ||
+            line.approvalStatus === TimesheetLineStatus.APPROVED,
+        );
+      const hasScopedLines = timesheet.lines.some(
+        (line) =>
+          line.site?.project?.projectManagerId === user.userId &&
+          line.approvalStatus === TimesheetLineStatus.SITE_APPROVED,
+      );
+      return {
+        canApproveGlobal: allSiteValidated && hasScopedLines,
+        canRejectGlobal: allSiteValidated && timesheet.user.role === UserRole.EMPLOYEE && hasScopedLines,
+        approvalStage: allSiteValidated && hasScopedLines ? 'PROJECT' : null,
+      };
+    }
+
+    return { canApproveGlobal: false, canRejectGlobal: false, approvalStage: null };
+  }
+
+  private timesheetForGlobalDecision(user: CurrentUserContext, id: string) {
+    return this.repository.findFirstOrThrow({
+      where: { id, ...(user.role === UserRole.SUPER_ADMIN ? {} : { tenantId: user.tenantId ?? '__missing__' }) },
+      include: {
+        user: { select: { role: true } },
+        lines: { include: { site: { include: { project: true } } } },
+      },
+    });
+  }
+
+  private async timesheetForLineDecision(user: CurrentUserContext, id: string, lineId: string) {
+    const timesheet = await this.repository.findFirstOrThrow({
+      where: { id, ...(await this.scope(user)) },
+      include: {
+        lines: {
+          where: { id: lineId },
+          include: { site: { include: { project: true } } },
+        },
+      },
+    });
+    if (!timesheet.lines.length) {
+      throw new BadRequestException('Ligne de feuille de temps introuvable.');
+    }
+    return timesheet;
+  }
+
+  private async recordLineDecision(
+    user: CurrentUserContext,
+    timesheet: { tenantId: string },
+    lineId: string,
+    oldStatus: TimesheetLineStatus,
+    newStatus: TimesheetLineStatus,
+    comment?: string,
+  ) {
+    await this.repository.createApprovalAction({
+      data: {
+        tenantId: timesheet.tenantId,
+        entityType: 'TIMESHEET_LINE',
+        entityId: lineId,
+        actionById: user.userId,
+        oldStatus,
+        newStatus,
+        comment,
+      },
+    });
+    await this.auditLog.log({
+      tenantId: timesheet.tenantId,
+      userId: user.userId,
+      action: newStatus === TimesheetLineStatus.REJECTED ? 'timesheet.line.rejected' : 'timesheet.line.approved',
+      entityType: 'TimesheetLine',
+      entityId: lineId,
+      metadata: { oldStatus, newStatus },
+    });
+  }
+
+  private async refreshAggregateStatus(id: string) {
+    const timesheet = await this.repository.findFirstOrThrow({
+      where: { id },
+      include: { lines: { select: { approvalStatus: true } } },
+    });
+    const statuses = timesheet.lines.map((line) => line.approvalStatus);
+    const status = statuses.every((value) => value === TimesheetLineStatus.APPROVED)
+      ? TimesheetStatus.APPROVED
+      : statuses.some((value) => value === TimesheetLineStatus.REJECTED)
+        ? TimesheetStatus.REJECTED
+        : statuses.some((value) => value === TimesheetLineStatus.SITE_APPROVED || value === TimesheetLineStatus.APPROVED)
+          ? TimesheetStatus.N1_APPROVED
+          : TimesheetStatus.SUBMITTED;
+    await this.repository.update({
+      where: { id },
+      data: {
+        status,
+        approvedAt: status === TimesheetStatus.APPROVED ? new Date() : null,
+        rejectedAt: status === TimesheetStatus.REJECTED ? new Date() : null,
       },
     });
   }

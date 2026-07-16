@@ -119,7 +119,7 @@ function NewProjectModal({ onCreated, clientOptions }: { onCreated: () => void; 
                 <option value="COMPLETED">Termine</option>
               </SelectField>
               <DateField label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
-              <DateField label="Fin prevue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
+              <DateField label="Fin prévue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
             </div>
             {error && <p className="text-sm text-dangerText">{error}</p>}
             <div className="flex justify-end gap-2">

@@ -32,6 +32,14 @@ export class TimesheetsRepository {
     return this.prisma.approvalAction.create(args);
   }
 
+  updateLine<T extends Prisma.TimesheetLineUpdateArgs>(args: Prisma.SelectSubset<T, Prisma.TimesheetLineUpdateArgs>) {
+    return this.prisma.timesheetLine.update(args);
+  }
+
+  updateLines(args: Prisma.TimesheetLineUpdateManyArgs) {
+    return this.prisma.timesheetLine.updateMany(args);
+  }
+
   transaction<T>(fn: (tx: Prisma.TransactionClient) => Promise<T>) {
     return this.prisma.$transaction(fn);
   }
@@ -46,6 +54,14 @@ export class TimesheetsRepository {
 
   createLine(tx: Prisma.TransactionClient, args: Prisma.TimesheetLineCreateArgs) {
     return tx.timesheetLine.create(args);
+  }
+
+  updateLineInTransaction(
+    tx: Prisma.TransactionClient,
+    id: string,
+    data: Prisma.TimesheetLineUpdateInput,
+  ) {
+    return tx.timesheetLine.update({ where: { id }, data });
   }
 
   findCalendarHolidays(tenantId: string, startDate: Date, endDate: Date) {

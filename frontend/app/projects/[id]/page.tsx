@@ -177,7 +177,7 @@ function EditProjectModal({
                 <option value="COMPLETED">Termine</option>
               </SelectField>
               <DateField label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
-              <DateField label="Fin prevue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
+              <DateField label="Fin prévue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
             </div>
 
             {error && <p className="text-sm text-dangerText">{error}</p>}
@@ -199,7 +199,6 @@ function EditProjectModal({
 const emptySiteForm = {
   code: '',
   name: '',
-  clientName: '',
   managerId: '',
   address: '',
   city: '',
@@ -215,25 +214,20 @@ const emptySiteForm = {
 function NewProjectSiteModal({
   project,
   employees,
-  clientOptions,
   onCreated,
 }: {
   project: Project;
   employees: Employee[];
-  clientOptions: string[];
   onCreated: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({
-    ...emptySiteForm,
-    clientName: project.clientName ?? '',
-  });
+  const [form, setForm] = useState(emptySiteForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
-    setForm({ ...emptySiteForm, clientName: project.clientName ?? '' });
+    setForm(emptySiteForm);
     setError(null);
   }, [open, project.clientName]);
 
@@ -243,8 +237,12 @@ function NewProjectSiteModal({
     .filter((employee) => employee.user.role === 'MANAGER');
 
   async function handleSubmit() {
-    if (!form.code.trim() || !form.name.trim() || !form.clientName.trim()) {
-      setError('Code, nom et client sont obligatoires.');
+    if (!form.code.trim() || !form.name.trim()) {
+      setError('Code et nom sont obligatoires.');
+      return;
+    }
+    if (!project.clientName?.trim()) {
+      setError("Le client doit d'abord etre defini dans le projet.");
       return;
     }
 
@@ -254,6 +252,7 @@ function NewProjectSiteModal({
       const payload: Record<string, unknown> = {
         ...form,
         projectId: project.id,
+        clientName: project.clientName,
         progressPercent: Number(form.progressPercent),
         gpsRadiusMeters: Number(form.gpsRadiusMeters),
       };
@@ -304,10 +303,6 @@ function NewProjectSiteModal({
             <div className="grid gap-3 md:grid-cols-2">
               <FormField label="Code site" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
               <FormField label="Nom du site" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-              <SelectField label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
-                <option value="">Selectionner</option>
-                {clientOptions.map((client) => <option key={client} value={client}>{client}</option>)}
-              </SelectField>
               <SelectField label="Chef de site" value={form.managerId} onChange={(e) => setForm((p) => ({ ...p, managerId: e.target.value }))}>
                 <option value="">Selectionner</option>
                 {managerOptions.map((employee) => (
@@ -321,7 +316,7 @@ function NewProjectSiteModal({
               <FormField label="Pays (ISO)" value={form.country} onChange={(e) => setForm((p) => ({ ...p, country: e.target.value }))} />
               <FormField label="Avancement (%)" type="number" min={0} max={100} value={form.progressPercent} onChange={(e) => setForm((p) => ({ ...p, progressPercent: Number(e.target.value) }))} />
               <DateField label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
-              <DateField label="Fin prevue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
+              <DateField label="Fin prévue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
             </div>
 
             <p className="text-xs font-semibold uppercase tracking-wide text-mutedText">Geolocalisation GPS (optionnel)</p>
@@ -378,7 +373,7 @@ export default function ProjectDetailPage() {
 
   const columns: ColumnDef<ProjectSite, unknown>[] = [
     { header: 'Code', accessorKey: 'code' },
-    { header: 'Site', cell: ({ row }) => row.original.name ?? '-' },
+    { header: 'Site', cell: ({ row }) => row.original.name },
     { header: 'Client', accessorKey: 'clientName' },
     { header: 'Ville', cell: ({ row }) => row.original.city ?? '-' },
     { header: 'Chef de site', cell: ({ row }) => row.original.manager ? `${row.original.manager.firstName} ${row.original.manager.lastName}` : '-' },
@@ -405,14 +400,14 @@ export default function ProjectDetailPage() {
           </Link>
           <PageHeader
             title={project.name}
-            description={`${project.code} - ${project.clientName ?? 'Client non renseigné'}`}
+            description={`${project.code} - ${project.clientName ?? 'Client non renseigne'}`}
             actions={
               canEdit ? (
                 <div className="flex flex-wrap gap-2">
                   <EditProjectModal project={project} employees={employees} clientOptions={clientOptions} onUpdated={refresh} />
                   <ConfirmDialog
                     title="Supprimer le projet"
-                    description={`Supprimer le projet ${project.name} ? Il sera suspendu et masqué de la liste active.`}
+                    description={`Supprimer le projet ${project.name} ? Il sera suspendu et masque de la liste active.`}
                     confirmLabel="Supprimer"
                     onConfirm={() => void handleDelete()}
                     trigger={
@@ -433,7 +428,7 @@ export default function ProjectDetailPage() {
             { label: 'Statut', value: project.status, active: true },
             { label: 'Sites', value: project.sites.length },
             { label: 'Debut', value: displayDate(project.startDate) },
-            { label: 'Fin prevue', value: displayDate(project.plannedEndDate) },
+            { label: 'Fin prévue', value: displayDate(project.plannedEndDate) },
           ]}
         />
 
@@ -467,7 +462,6 @@ export default function ProjectDetailPage() {
               <NewProjectSiteModal
                 project={project}
                 employees={employees}
-                clientOptions={clientOptions}
                 onCreated={refresh}
               />
             )}

@@ -3,7 +3,7 @@ import './globals.css';
 
 export const metadata: Metadata = {
   title: 'Pointage360',
-  description: 'SaaS RH multi-tenant pour pointage, timesheets, conges et sites.',
+  description: 'SaaS RH multi-tenant pour pointage, timesheets, congés et sites.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

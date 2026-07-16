@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ColumnDef } from '@tanstack/react-table';
-import { Check, Plus, Trash2, X } from 'lucide-react';
+import { Plus, Trash2, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
@@ -176,18 +176,9 @@ export default function TimesheetsPage() {
   // Timesheets validees par N+1/N+2 ou HR.
   const myRole    = tokenStore.session?.role ?? '';
   const myUserId  = tokenStore.session?.user?.id ?? '';
-  const canManage = ['RESOURCE_MANAGER', 'HR', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
   // HR est en lecture seule — ne peut pas créer de timesheet
   const canCreate = ['RESOURCE_MANAGER', 'PROJECT_MANAGER', 'MANAGER', 'EMPLOYEE'].includes(myRole);
 
-  async function handleApprove(id: string) {
-    try { await api.approveTimesheet(id); refresh(); }
-    catch (e) { setActionError(e instanceof Error ? e.message : 'Erreur'); }
-  }
-  async function handleReject(id: string) {
-    try { await api.rejectTimesheet(id, 'Refusé par le gestionnaire'); refresh(); }
-    catch (e) { setActionError(e instanceof Error ? e.message : 'Erreur'); }
-  }
 
   async function handleDelete(id: string) {
     try { await api.deleteTimesheet(id); refresh(); }
@@ -221,32 +212,6 @@ export default function TimesheetsPage() {
                 </button>
               }
             />
-          )}
-          {canManage && row.original.user.id !== myUserId && ['SUBMITTED', 'N1_APPROVED'].includes(row.original.status) && (
-            <>
-              <ConfirmDialog
-                title="Approuver la feuille de temps"
-                description={`Approuver la feuille de temps de ${row.original.user.firstName} ${row.original.user.lastName} ?`}
-                confirmLabel="Approuver"
-                onConfirm={() => handleApprove(row.original.id)}
-                trigger={
-                  <button type="button" title="Approuver" className="flex h-7 w-7 items-center justify-center rounded-md text-successText hover:bg-successBg">
-                    <Check className="h-4 w-4" />
-                  </button>
-                }
-              />
-              <ConfirmDialog
-                title="Refuser la feuille de temps"
-                description={`Refuser la feuille de temps de ${row.original.user.firstName} ${row.original.user.lastName} ?`}
-                confirmLabel="Refuser"
-                onConfirm={() => handleReject(row.original.id)}
-                trigger={
-                  <button type="button" title="Refuser" className="flex h-7 w-7 items-center justify-center rounded-md text-dangerText hover:bg-dangerBg">
-                    <X className="h-4 w-4" />
-                  </button>
-                }
-              />
-            </>
           )}
         </div>
       ),

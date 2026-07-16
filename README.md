@@ -1,6 +1,6 @@
 # Pointage360
 
-Pointage360 est une plateforme SaaS B2B multi-tenant pour gerer le pointage entree/sortie, les timesheets, les conges, la presence par site, les validations manager/RH et les rapports RH/paie.
+Pointage360 est une plateforme SaaS B2B multi-tenant pour gerer le pointage entree/sortie, les timesheets, les congés, la presence par site, les validations manager/RH et les rapports RH/paie.
 
 Le projet est concu comme un pilote interne pouvant evoluer vers un vrai produit vendable a plusieurs societes clientes ayant des sites.
 
@@ -108,9 +108,9 @@ Mot de passe pour tous: `Password123!`
 
 - `SUPER_ADMIN`: gere tenants, abonnements et statistiques globales
 - `TENANT_ADMIN`: gere sa societe, utilisateurs, employes, sites, settings et rapports
-- `HR`: gere employes, conges et exports RH/paie
-- `MANAGER`: valide pointages, timesheets, conges equipe et consulte ses sites
-- `EMPLOYEE`: pointe, remplit sa timesheet, demande un conge et consulte ses donnees
+- `HR`: gere employes, congés et exports RH/paie
+- `MANAGER`: valide pointages, timesheets, congés equipe et consulte ses sites
+- `EMPLOYEE`: pointe, remplit sa timesheet, demande un congé et consulte ses donnees
 
 ## Multi-tenant
 
@@ -177,8 +177,8 @@ Le seed cree:
 - affectations sites
 - pointages de la semaine
 - timesheets et lignes
-- types de conges Maroc
-- soldes conges
+- types de congés Maroc
+- soldes congés
 - jours feries Maroc
 - audit logs et notifications exemples
 
@@ -208,13 +208,13 @@ Guide detaille: [docs/deploiement-heberjahiz.md](docs/deploiement-heberjahiz.md)
 
 ## Fonctionnalites completees (v0.2)
 
-- **Settings UI** : onglets reels Societe, Jours feries, Types de conges avec formulaires CRUD.
+- **Settings UI** : onglets reels Societe, Jours feries, Types de congés avec formulaires CRUD.
 - **BullMQ processors** : 4 workers — exports CSV vers MinIO, notifications, rappels timesheets, rapports agregats.
-- **Upload MinIO** : endpoint upload justificatifs conges, migration SQL, BookingModal avec file picker.
-- **Emails transactionnels** : MailModule Nodemailer global, 5 templates HTML — approbation/rejet conge, soumission approbateurs, rappel timesheet, confirmation check-in.
+- **Upload MinIO** : endpoint upload justificatifs congés, migration SQL, BookingModal avec file picker.
+- **Emails transactionnels** : MailModule Nodemailer global, 5 templates HTML — approbation/rejet congé, soumission approbateurs, rappel timesheet, confirmation check-in.
 - **API client complete** : CRUD leave, attendance, timesheet, settings, upload.
-- **Pages detail enrichies** : team/[id] avec soldes conges et pointages. sites/[id] avec affectations et lien carte.
-- **Page demandes de conge** : Approuver/Refuser en temps reel, filtre statut, refresh automatique.
+- **Pages detail enrichies** : team/[id] avec soldes congés et pointages. sites/[id] avec affectations et lien carte.
+- **Page demandes de congé** : Approuver/Refuser en temps reel, filtre statut, refresh automatique.
 - **Hook useApiData** : ajout refresh() pour recharger apres une action.
 
 ## Prochaines etapes

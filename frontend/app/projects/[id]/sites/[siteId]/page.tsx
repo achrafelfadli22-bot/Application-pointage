@@ -36,7 +36,14 @@ type Employee = {
   user: { id: string; firstName: string; lastName: string; email: string; role: string; status?: string };
 };
 
-type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[] };
+type SiteOptions = { siteRoleOptions: string[] };
+
+type Project = {
+  id: string;
+  code: string;
+  name: string;
+  clientName?: string | null;
+};
 
 type AttendancePunch = {
   id: string;
@@ -116,27 +123,26 @@ const DEFAULT_SITE_ROLE_OPTIONS = [
   'Aide electricien',
   'Controle qualite',
   'HSE',
-  'Administratif chantier',
+  'Administratif site',
 ];
 
 function EditSiteModal({
   site,
   projectId,
+  clientName,
   employees,
-  siteOptions,
   onUpdated,
 }: {
   site: Site;
   projectId: string;
+  clientName: string;
   employees: Employee[];
-  siteOptions: SiteOptions;
   onUpdated: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     code: site.code,
     name: site.name,
-    clientName: site.clientName,
     address: site.address ?? '',
     city: site.city ?? '',
     country: site.country ?? 'MA',
@@ -157,7 +163,6 @@ function EditSiteModal({
     setForm({
       code: site.code,
       name: site.name,
-      clientName: site.clientName,
       address: site.address ?? '',
       city: site.city ?? '',
       country: site.country ?? 'MA',
@@ -180,27 +185,13 @@ function EditSiteModal({
     .sort((a, b) =>
       `${a.user.firstName} ${a.user.lastName}`.localeCompare(`${b.user.firstName} ${b.user.lastName}`),
     );
-  const clientOptions = useMemo(() => {
-    const seen = new Set<string>();
-    const options: string[] = [];
-
-    for (const client of [...(siteOptions.clientOptions ?? []), site.clientName]) {
-      const value = String(client ?? '').trim();
-      if (!value) continue;
-
-      const key = value.toLocaleLowerCase('fr-FR');
-      if (seen.has(key)) continue;
-
-      seen.add(key);
-      options.push(value);
-    }
-
-    return options;
-  }, [site.clientName, siteOptions.clientOptions]);
-
   async function handleSubmit() {
-    if (!form.code || !form.name || !form.clientName) {
-      setError('Code, nom et client sont obligatoires.');
+    if (!form.code || !form.name) {
+      setError('Code et nom sont obligatoires.');
+      return;
+    }
+    if (!clientName.trim()) {
+      setError("Le client doit d'abord etre defini dans le projet.");
       return;
     }
 
@@ -211,7 +202,7 @@ function EditSiteModal({
         projectId,
         code: form.code,
         name: form.name,
-        clientName: form.clientName,
+        clientName,
         address: form.address || undefined,
         city: form.city || undefined,
         country: form.country || undefined,
@@ -247,7 +238,7 @@ function EditSiteModal({
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(720px,calc(100vw-32px))] max-h-[90vh] overflow-auto -translate-x-1/2 -translate-y-1/2 rounded-xl border border-borderSoft bg-surface shadow-dropdown">
           <div className="flex items-center justify-between border-b border-borderSoft px-5 py-4">
-            <Dialog.Title className="text-base font-semibold text-bodyText">Modifier le chantier</Dialog.Title>
+            <Dialog.Title className="text-base font-semibold text-bodyText">Modifier le site</Dialog.Title>
             <Dialog.Close className="flex h-7 w-7 items-center justify-center rounded-md text-mutedText hover:bg-surfaceHover">
               <X className="h-4 w-4" />
             </Dialog.Close>
@@ -255,16 +246,8 @@ function EditSiteModal({
 
           <div className="grid gap-4 p-5">
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Code chantier" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
-              <FormField label="Nom du chantier" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-              <SelectField label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
-                <option value="">Selectionner</option>
-                {clientOptions.map((client) => (
-                  <option key={client} value={client}>
-                    {client}
-                  </option>
-                ))}
-              </SelectField>
+              <FormField label="Code site" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
+              <FormField label="Nom du site" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
               <SelectField label="Chef de site" value={form.managerId} onChange={(e) => setForm((p) => ({ ...p, managerId: e.target.value }))}>
                 <option value="">Selectionner</option>
                 {managerOptions.map((employee) => (
@@ -282,7 +265,7 @@ function EditSiteModal({
               <FormField label="Ville" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
               <FormField label="Pays (ISO)" value={form.country} onChange={(e) => setForm((p) => ({ ...p, country: e.target.value }))} />
               <DateField label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
-              <DateField label="Fin prevue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
+              <DateField label="Fin prévue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
               <FormField
                 label="Avancement (%)"
                 type="number"
@@ -435,7 +418,7 @@ function AssignEmployeeModal({
       <Dialog.Trigger asChild>
         <PrimaryButton type="button">
           <UserPlus className="h-4 w-4" />
-          Affecter un employe
+          Affecter un employé
         </PrimaryButton>
       </Dialog.Trigger>
       <Dialog.Portal>
@@ -443,7 +426,7 @@ function AssignEmployeeModal({
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(560px,calc(100vw-32px))] max-h-[90vh] overflow-auto -translate-x-1/2 -translate-y-1/2 rounded-xl border border-borderSoft bg-surface shadow-dropdown">
           <div className="flex items-center justify-between border-b border-borderSoft px-5 py-4">
             <Dialog.Title className="text-base font-semibold text-bodyText">
-              Affecter un employe au chantier
+              Affecter un employé au site
             </Dialog.Title>
             <Dialog.Close className="flex h-7 w-7 items-center justify-center rounded-md text-mutedText hover:bg-surfaceHover">
               <X className="h-4 w-4" />
@@ -457,7 +440,7 @@ function AssignEmployeeModal({
               onChange={(event) => setForm((previous) => ({ ...previous, userId: event.target.value }))}
               disabled={availableEmployees.length === 0}
             >
-              <option value="">Selectionner un employe</option>
+              <option value="">Selectionner un employé</option>
               {availableEmployees.map((employee) => (
                 <option key={employee.user.id} value={employee.user.id}>
                   {employee.user.firstName} {employee.user.lastName}
@@ -492,7 +475,7 @@ function AssignEmployeeModal({
             </SelectField>
 
             {availableEmployees.length === 0 && (
-              <p className="text-sm text-mutedText">Tous les employes actifs disponibles sont deja affectes a ce chantier.</p>
+              <p className="text-sm text-mutedText">Tous les employes actifs disponibles sont deja affectes a ce site.</p>
             )}
             {error && <p className="text-sm text-dangerText">{error}</p>}
 
@@ -523,6 +506,10 @@ export default function SiteDetailPage() {
     () => api.site(siteId) as Promise<Site>,
     { ...fallback, assignments: [], attendancePunches: [] },
   );
+  const { data: project } = useApiData<Project>(
+    () => api.project(projectId) as Promise<Project>,
+    { id: projectId, code: '', name: 'Projet', clientName: null },
+  );
   const myRole = tokenStore.session?.role ?? '';
   const currentUserId = tokenStore.session?.user.id;
   const canEditSite = myRole === 'RESOURCE_MANAGER';
@@ -535,7 +522,7 @@ export default function SiteDetailPage() {
   );
   const { data: siteOptions } = useApiData<SiteOptions>(
     () => api.settingsSiteOptions() as Promise<SiteOptions>,
-    { siteRoleOptions: DEFAULT_SITE_ROLE_OPTIONS, clientOptions: [] },
+    { siteRoleOptions: DEFAULT_SITE_ROLE_OPTIONS },
   );
 
   const assignmentColumns: ColumnDef<Assignment, unknown>[] = [
@@ -614,9 +601,7 @@ export default function SiteDetailPage() {
       header: 'Statut',
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
     },
-
   ];
-  
 
   const gpsAnomalies = site.attendancePunches.filter((p) => p.isGpsAnomaly).length;
   const activeAssignments = site.assignments.filter((a) => !a.endDate || new Date(a.endDate) >= new Date()).length;
@@ -644,7 +629,7 @@ export default function SiteDetailPage() {
           </Link>
           <PageHeader
             title={site.name}
-            description={`${site.code} · ${site.clientName}`}
+            description={`${site.code} · Projet ${project.code}`}
             actions={
               canEditSite || canAssign ? (
                 <div className="flex flex-wrap gap-2">
@@ -652,15 +637,15 @@ export default function SiteDetailPage() {
                     <EditSiteModal
                       site={site}
                       projectId={projectId}
+                      clientName={project.clientName ?? ''}
                       employees={employees}
-                      siteOptions={siteOptions}
                       onUpdated={refresh}
                     />
                   )}
                   {canEditSite && (
                     <ConfirmDialog
-                      title="Supprimer le chantier"
-                      description={`Supprimer le chantier ${site.name} ? Il sera suspendu et masque des listes actives.`}
+                      title="Supprimer le site"
+                      description={`Supprimer le site ${site.name} ? Il sera suspendu et masque des listes actives.`}
                       confirmLabel="Supprimer"
                       onConfirm={() => void handleDeleteSite()}
                       trigger={
@@ -705,14 +690,13 @@ export default function SiteDetailPage() {
 
         {/* Informations principales */}
         <AccentCard>
-          <h2 className="mb-4 text-base font-bold text-bodyText">Informations du chantier</h2>
+          <h2 className="mb-4 text-base font-bold text-bodyText">Informations du site</h2>
           <div className="mb-5 max-w-xl">
             <div className="mb-2 text-xs font-semibold uppercase text-mutedText">Avancement du projet</div>
             <ProgressMeter value={site.progressPercent} className="max-w-md" />
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <InfoRow label="Code" value={<span className="font-mono text-accent">{site.code}</span>} />
-            <InfoRow label="Client" value={site.clientName} />
             <InfoRow label="Ville" value={site.city} />
             <InfoRow label="Pays" value={site.country} />
             <InfoRow label="Adresse" value={site.address} />
@@ -786,7 +770,7 @@ export default function SiteDetailPage() {
             />
           ) : (
             <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-borderSoft text-sm text-mutedText">
-              Coordonnées GPS non renseignées pour ce chantier.
+              Coordonnées GPS non renseignées pour ce site.
             </div>
           )}
         </AccentCard>
@@ -809,7 +793,7 @@ export default function SiteDetailPage() {
             Derniers pointages ({site.attendancePunches.length})
           </h2>
           {site.attendancePunches.length === 0 ? (
-            <p className="text-sm text-mutedText">Aucun pointage récent sur ce chantier.</p>
+            <p className="text-sm text-mutedText">Aucun pointage récent sur ce site.</p>
           ) : (
             <DataTable columns={punchColumns} data={site.attendancePunches} />
           )}

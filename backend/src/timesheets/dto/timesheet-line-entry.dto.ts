@@ -32,6 +32,11 @@ export class TimesheetLineDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   siteId?: string;
 
   @ApiProperty()

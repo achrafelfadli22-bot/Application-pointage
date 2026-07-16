@@ -148,7 +148,7 @@ export default function TimeOffPage() {
       <div className="grid gap-6">
         <PageHeader
           title="Conges"
-          description="Soldes, calendrier personnel et demandes de conges."
+          description="Soldes, calendrier personnel et demandes de congés."
           actions={
             <div className="flex items-center gap-2">
               {canManageRequests && (
@@ -185,7 +185,7 @@ export default function TimeOffPage() {
           <div className="overflow-hidden rounded-xl border border-borderSoft bg-surface shadow-card">
             <div className="border-b border-borderSoft px-5 py-3">
               <p className="text-sm font-semibold text-bodyText">
-                Soldes de conges - {selectedPerson?.name ?? 'Moi'} - {currentYear}
+                Soldes de congés - {selectedPerson?.name ?? 'Moi'} - {currentYear}
               </p>
             </div>
             <div className="divide-y divide-borderSoft">

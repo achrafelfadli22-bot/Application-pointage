@@ -73,7 +73,7 @@ const demoLeaveTypes: LeaveType[] = [
 
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
 
-const TABS = ['Societe', 'Jours feries', 'Types de conges', 'Types timesheet', 'Sites', 'Pointage'] as const;
+const TABS = ['Societe', 'Jours feries', 'Types de congés', 'Types timesheet', 'Sites', 'Pointage'] as const;
 type Tab = (typeof TABS)[number];
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
@@ -852,7 +852,7 @@ function TimesheetTaskTypesTab() {
     downloadExcelTemplate('modele-types-tache-timesheet.xlsx', 'Types tache', [
       { Code: 'EXECUTION', Libelle: 'Execution travaux', Statut: 'Actif' },
       { Code: 'PREPARATION', Libelle: 'Preparation', Statut: 'Actif' },
-      { Code: 'REUNION_CHANTIER', Libelle: 'Reunion site', Statut: 'Actif' },
+      { Code: 'REUNION_SITE', Libelle: 'Reunion site', Statut: 'Actif' },
     ]);
   }
 
@@ -1526,7 +1526,7 @@ export default function SettingsPage() {
           <div className="px-6">
             {tab === 'Societe' && <CompanyTab />}
             {tab === 'Jours feries' && <HolidaysTab />}
-            {tab === 'Types de conges' && <LeaveTypesTab />}
+            {tab === 'Types de congés' && <LeaveTypesTab />}
             {tab === 'Types timesheet' && <TimesheetTaskTypesTab />}
             {tab === 'Sites' && <SiteOptionsTab />}
             {tab === 'Pointage' && <AttendanceSettingsTab />}

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarDays, Loader2, Plus, Save, Send, ThumbsUp, Trash2, Undo2, X } from 'lucide-react';
+import { CalendarDays, Loader2, Plus, Save, Send, Trash2, Undo2, X } from 'lucide-react';
 import { api, tokenStore } from '@/lib/api-client';
 import { useApiData } from '@/lib/use-api-data';
 import { ConfirmDialog } from '../ui/confirm-dialog';
@@ -34,6 +34,10 @@ type SiteOption = {
 };
 
 type Line = {
+  id: string;
+  approvalStatus: string;
+  rejectionReason?: string | null;
+  approvalPermissions?: { canEdit: boolean; canApprove: boolean; canReject: boolean; stage?: 'SITE' | 'PROJECT' | null };
   taskName: string;
   billingType: string;
   activity?: string | null;
@@ -58,7 +62,12 @@ type Timesheet = {
   periodEnd: string;
   status: string;
   rejectionReason?: string | null;
-  permissions?: { canEdit?: boolean };
+  permissions?: {
+    canEdit?: boolean;
+    canApproveGlobal?: boolean;
+    canRejectGlobal?: boolean;
+    approvalStage?: 'SITE' | 'PROJECT' | null;
+  };
   user: { id: string; firstName: string; lastName: string };
   approvedBy?: { firstName: string; lastName: string } | null;
   calendarEvents?: {
@@ -70,6 +79,10 @@ type Timesheet = {
 };
 
 type EditRow = {
+  id?: string;
+  approvalStatus: string;
+  rejectionReason?: string | null;
+  approvalPermissions?: Line['approvalPermissions'];
   projectId: string;
   projectLabel: string;
   siteId: string;
@@ -111,6 +124,7 @@ function emptyHours(days: Date[]) {
 
 function createEmptyRow(days: Date[], defaultTaskType: string): EditRow {
   return {
+    approvalStatus: 'DRAFT',
     projectId: '',
     projectLabel: '',
     siteId: '',
@@ -151,17 +165,15 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
   const myUserId = tokenStore.session?.user?.id ?? '';
   const isOwner = timesheet.user.id === myUserId;
   const isEditor = ['RESOURCE_MANAGER', 'HR', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
-  const isApprover = ['HR', 'PROJECT_MANAGER', 'MANAGER'].includes(myRole);
   const isReopener = ['RESOURCE_MANAGER', 'HR'].includes(myRole);
 
   const isDraftOrReopened = ['DRAFT', 'REOPENED'].includes(timesheet.status);
-  const isWaitingApproval = ['SUBMITTED', 'N1_APPROVED'].includes(timesheet.status);
   const isApprovedOrRejected = ['APPROVED', 'REJECTED'].includes(timesheet.status);
 
   const canEdit = timesheet.permissions?.canEdit ?? (isDraftOrReopened && (isOwner || isEditor));
+  const canApproveGlobal = timesheet.permissions?.canApproveGlobal ?? false;
+  const canRejectGlobal = timesheet.permissions?.canRejectGlobal ?? false;
   const canSubmit = isDraftOrReopened && (isOwner || isEditor);
-  const canApprove = isWaitingApproval && isApprover && !isOwner;
-  const canReject = isWaitingApproval && isApprover && !isOwner;
   const canReopen = isApprovedOrRejected && isReopener;
   const canDelete = timesheet.status === 'DRAFT' && isOwner;
   const calendarEventsByDate = useMemo(() => {
@@ -188,6 +200,10 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
     return timesheet.lines.map((line) => {
       const project = line.site?.project;
       return {
+        id: line.id,
+        approvalStatus: line.approvalStatus,
+        rejectionReason: line.rejectionReason,
+        approvalPermissions: line.approvalPermissions,
         projectId: project?.id ?? '',
         projectLabel: entityLabel(project),
         siteId: line.site?.id ?? '',
@@ -288,6 +304,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
 
   function serializeRows() {
     return rows.map((row) => ({
+      id: row.id,
       siteId: row.siteId || undefined,
       taskName: row.taskName.trim(),
       billingType: row.billingType,
@@ -403,7 +420,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
           {canSubmit && (
             <ConfirmDialog
               title="Soumettre la feuille de temps"
-              description="Les lignes seront sauvegardees avant la soumission."
+              description="Les lignes seront sauvegardées avant la soumission."
               confirmLabel="Soumettre"
               onConfirm={handleSubmit}
               trigger={
@@ -413,29 +430,29 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
               }
             />
           )}
-          {canApprove && (
+          {canRejectGlobal && (
             <ConfirmDialog
-              title="Approuver la feuille de temps"
-              description={`Approuver la feuille de temps de ${timesheet.user.firstName} ${timesheet.user.lastName} ?`}
-              confirmLabel="Approuver"
-              onConfirm={() => doTransition(() => api.approveTimesheet(timesheet.id))}
+              title="Refuser les lignes de mes projets"
+              description="Les lignes de vos projets retourneront aux chefs de site pour correction."
+              confirmLabel="Refuser"
+              onConfirm={() => doTransition(() => api.rejectTimesheet(timesheet.id, 'Refuse par le chef de projet'))}
               trigger={
-                <SecondaryButton type="button" disabled={transitioning}>
-                  <ThumbsUp className="h-4 w-4" /> Approuver
-                </SecondaryButton>
+                <DangerButton type="button" disabled={saving || transitioning}>
+                  <X className="h-4 w-4" /> Refuser
+                </DangerButton>
               }
             />
           )}
-          {canReject && (
+          {canApproveGlobal && (
             <ConfirmDialog
-              title="Refuser la feuille de temps"
-              description={`Refuser la feuille de temps de ${timesheet.user.firstName} ${timesheet.user.lastName} ?`}
-              confirmLabel="Refuser"
-              onConfirm={() => doTransition(() => api.rejectTimesheet(timesheet.id, 'Refuse par le gestionnaire'))}
+              title={timesheet.permissions?.approvalStage === 'SITE' ? 'Valider mes sites' : 'Valider mes projets'}
+              description="Seules les lignes de votre perimetre seront validees."
+              confirmLabel="Valider"
+              onConfirm={() => doTransition(() => api.approveTimesheet(timesheet.id))}
               trigger={
-                <DangerButton type="button" disabled={transitioning}>
-                  <X className="h-4 w-4" /> Refuser
-                </DangerButton>
+                <PrimaryButton type="button" disabled={saving || transitioning}>
+                  <Send className="h-4 w-4" /> Valider
+                </PrimaryButton>
               }
             />
           )}
@@ -499,7 +516,8 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                 );
               })}
               <th className="border-b border-borderSoft px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wide text-mutedText">Total</th>
-              {canEdit && <th className="w-8 border-b border-borderSoft" />}
+              <th className="min-w-[190px] border-b border-borderSoft px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">Validation</th>
+              {isDraftOrReopened && canEdit && <th className="w-8 border-b border-borderSoft" />}
             </tr>
           </thead>
           <tbody>
@@ -513,15 +531,24 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
 
             {rows.map((row, rowIndex) => {
               const rowTotal = days.reduce((sum, day) => sum + (row.hoursMap[dateKey(day)] ?? 0), 0);
+              const rowCanEdit = isDraftOrReopened ? canEdit : (row.approvalPermissions?.canEdit ?? false);
+              const canEditStructure = isDraftOrReopened && rowCanEdit;
               const siteOptions = sitesForRow(row);
               const taskTypeOptions = activeTaskTypes.some((taskType) => taskType.value === row.activity)
                 ? activeTaskTypes
                 : [...activeTaskTypes, ...taskTypes.filter((taskType) => taskType.value === row.activity)];
 
               return (
-                <tr key={rowIndex} className="group border-b border-borderSoft hover:bg-surfaceHover">
+                <tr
+                  key={rowIndex}
+                  className={`group border-b border-borderSoft ${
+                    rowCanEdit
+                      ? 'hover:bg-surfaceHover'
+                      : 'bg-grayCard/50 text-mutedText opacity-70'
+                  }`}
+                >
                   <td className="min-w-[190px] px-3 py-2">
-                    {canEdit ? (
+                    {canEditStructure ? (
                       <select
                         className="w-full rounded border border-borderSoft bg-white px-2 py-1 text-xs outline-none focus:border-accent"
                         value={row.projectId}
@@ -542,7 +569,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                   </td>
 
                   <td className="min-w-[190px] px-3 py-2">
-                    {canEdit ? (
+                    {canEditStructure ? (
                       <select
                         className="w-full rounded border border-borderSoft bg-white px-2 py-1 text-xs outline-none focus:border-accent"
                         value={row.siteId}
@@ -561,7 +588,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                   </td>
 
                   <td className="min-w-[160px] px-3 py-2">
-                    {canEdit ? (
+                    {rowCanEdit ? (
                       <select
                         className="w-full rounded border border-borderSoft bg-white px-2 py-1 text-xs outline-none focus:border-accent"
                         value={row.activity}
@@ -579,7 +606,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                   </td>
 
                   <td className="min-w-[220px] px-3 py-2">
-                    {canEdit ? (
+                    {rowCanEdit ? (
                       <input
                         className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-sm text-bodyText outline-none focus:border-accent focus:bg-white"
                         value={row.taskName}
@@ -592,7 +619,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                   </td>
 
                   <td className="px-3 py-2">
-                    {canEdit ? (
+                    {rowCanEdit ? (
                       <select
                         className="rounded border border-borderSoft bg-white px-2 py-1 text-xs outline-none focus:border-accent"
                         value={row.billingType}
@@ -622,7 +649,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                           hasHoliday ? 'bg-amber-50/70' : hasLeave ? 'bg-sky-50/70' : ''
                         }`}
                       >
-                        {canEdit ? (
+                        {rowCanEdit ? (
                           <input
                             type="number"
                             min={0}
@@ -647,7 +674,13 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                   })}
 
                   <td className="px-3 py-2 text-right font-semibold text-bodyText">{rowTotal > 0 ? `${rowTotal}h` : '-'}</td>
-                  {canEdit && (
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <StatusBadge status={row.approvalStatus} />
+                    </div>
+                    {row.rejectionReason && <p className="mt-1 text-xs text-dangerText">{row.rejectionReason}</p>}
+                  </td>
+                  {isDraftOrReopened && canEdit && (
                     <td className="px-2 py-2 text-center opacity-0 group-hover:opacity-100">
                       <button type="button" onClick={() => removeRow(rowIndex)} className="text-mutedText hover:text-dangerText" title="Supprimer">
                         <X className="h-3.5 w-3.5" />
@@ -671,13 +704,14 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                 );
               })}
               <td className="px-3 py-3 text-right text-sm font-bold text-accent">{grandTotal > 0 ? `${grandTotal}h` : '-'}</td>
-              {canEdit && <td />}
+              <td />
+              {isDraftOrReopened && canEdit && <td />}
             </tr>
           </tbody>
         </table>
       </div>
 
-      {canEdit && (
+      {isDraftOrReopened && canEdit && (
         <div className="border-t border-borderSoft p-4">
           <GhostButton type="button" onClick={addRow}>
             <Plus className="h-4 w-4" /> Ajouter une ligne

@@ -31,7 +31,7 @@ async function bootstrap() {
   if (isSwaggerEnabled(config)) {
     const swaggerConfig = new DocumentBuilder()
       .setTitle('Pointage360 API')
-      .setDescription('API REST multi-tenant pour pointage, timesheets, conges et sites.')
+      .setDescription('API REST multi-tenant pour pointage, timesheets, congés et sites.')
       .setVersion('0.1.0')
       .addBearerAuth()
       .build();

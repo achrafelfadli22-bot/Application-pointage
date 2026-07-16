@@ -12,6 +12,10 @@ import { useApiData } from '@/lib/use-api-data';
 
 type TEntry = { entryDate: string; hours: number; comment?: string };
 type TLine = {
+  id: string;
+  approvalStatus: string;
+  rejectionReason?: string | null;
+  approvalPermissions?: { canEdit: boolean; canApprove: boolean; canReject: boolean; stage?: 'SITE' | 'PROJECT' | null };
   taskName: string;
   billingType: string;
   activity: string;

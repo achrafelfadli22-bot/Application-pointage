@@ -71,6 +71,14 @@ enum TimesheetStatus {
   REOPENED
 }
 
+enum TimesheetLineStatus {
+  DRAFT
+  SUBMITTED
+  SITE_APPROVED
+  APPROVED
+  REJECTED
+}
+
 enum BillingType {
   BILLABLE
   NON_BILLABLE
@@ -87,6 +95,7 @@ enum LeaveRequestStatus {
 
 enum ApprovalEntityType {
   TIMESHEET
+  TIMESHEET_LINE
   LEAVE_REQUEST
   ATTENDANCE_PUNCH
 }
@@ -372,6 +381,14 @@ model TimesheetLine {
   activity       String?
   workLocation   WorkLocation @default(SITE)
   placeOfWork    String?
+  approvalStatus TimesheetLineStatus @default(DRAFT)
+  siteApprovedById String?
+  siteApprovedAt DateTime?
+  projectApprovedById String?
+  projectApprovedAt DateTime?
+  rejectedById String?
+  rejectedAt DateTime?
+  rejectionReason String?
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
@@ -383,6 +400,7 @@ model TimesheetLine {
   @@index([tenantId])
   @@index([timesheetId])
   @@index([siteId])
+  @@index([approvalStatus])
 }
 
 model TimesheetDayEntry {

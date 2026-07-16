@@ -216,6 +216,13 @@ export const api = {
     apiRequest(`/timesheets/${id}/submit`, { method: 'POST' }),
   approveTimesheet: (id: string) =>
     apiRequest(`/timesheets/${id}/approve`, { method: 'POST' }),
+  approveTimesheetLine: (timesheetId: string, lineId: string) =>
+    apiRequest(`/timesheets/${timesheetId}/lines/${lineId}/approve`, { method: 'POST' }),
+  rejectTimesheetLine: (timesheetId: string, lineId: string, reason: string) =>
+    apiRequest(`/timesheets/${timesheetId}/lines/${lineId}/reject`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    }),
   updateTimesheet: (id: string, data: Record<string, unknown>) =>
     apiRequest(`/timesheets/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteTimesheet: (id: string) =>
