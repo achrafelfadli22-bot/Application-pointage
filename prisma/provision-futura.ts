@@ -63,6 +63,51 @@ async function main() {
     },
   });
 
+  const hrPasswordHash = await bcrypt.hash('123456789', 12);
+  const hr = await prisma.user.upsert({
+    where: { email: 'rh@futura-expert.com' },
+    update: {
+      tenantId: tenant.id,
+      passwordHash: hrPasswordHash,
+      firstName: 'Responsable',
+      lastName: 'RH',
+      role: UserRole.HR,
+      status: UserStatus.ACTIVE,
+      deletedAt: null,
+    },
+    create: {
+      tenantId: tenant.id,
+      email: 'rh@futura-expert.com',
+      passwordHash: hrPasswordHash,
+      firstName: 'Responsable',
+      lastName: 'RH',
+      role: UserRole.HR,
+      status: UserStatus.ACTIVE,
+    },
+  });
+
+  await prisma.employeeProfile.upsert({
+    where: { userId: hr.id },
+    update: {
+      tenantId: tenant.id,
+      employeeNumber: 'FE-RH-001',
+      jobTitle: 'Responsable RH',
+      contractType: 'CDI',
+      hireDate: new Date('2026-01-01'),
+      status: 'ACTIVE',
+    },
+    create: {
+      tenantId: tenant.id,
+      userId: hr.id,
+      employeeNumber: 'FE-RH-001',
+      jobTitle: 'Responsable RH',
+      contractType: 'CDI',
+      hireDate: new Date('2026-01-01'),
+      annualLeaveBalance: 18,
+      status: 'ACTIVE',
+    },
+  });
+
   console.log(
     JSON.stringify({
       tenant: tenant.name,

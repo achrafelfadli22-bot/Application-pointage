@@ -379,7 +379,14 @@ export class TimesheetsService {
     return this.findOne(user, id);
   }
 
-  reopen(user: CurrentUserContext, id: string) {
+  async reopen(user: CurrentUserContext, id: string) {
+    const timesheet = await this.repository.findFirstOrThrow({
+      where: { id, ...(await this.scope(user)) },
+      select: { status: true },
+    });
+    if (timesheet.status === TimesheetStatus.APPROVED) {
+      throw new ForbiddenException('Une feuille approuvee est disponible uniquement en consultation.');
+    }
     return this.transition(user, id, TimesheetStatus.REOPENED, 'timesheet.reopened');
   }
 

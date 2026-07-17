@@ -26,7 +26,14 @@ type Assignment = {
   roleOnSite?: string;
   startDate: string;
   endDate?: string;
-  user: { id: string; firstName: string; lastName: string; email: string; role: string };
+  user: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    role: string;
+    employeeProfile?: { id: string } | null;
+  };
 };
 
 type Employee = {
@@ -512,8 +519,8 @@ export default function SiteDetailPage() {
   );
   const myRole = tokenStore.session?.role ?? '';
   const currentUserId = tokenStore.session?.user.id;
-  const canEditSite = myRole === 'RESOURCE_MANAGER';
-  const canManageAssignments = ['RESOURCE_MANAGER', 'HR', 'MANAGER'].includes(myRole);
+  const canEditSite = myRole === 'RESOURCE_MANAGER' || myRole === 'HR';
+  const canManageAssignments = myRole === 'RESOURCE_MANAGER';
   const canAssign =
     ['RESOURCE_MANAGER', 'HR'].includes(myRole) || (myRole === 'MANAGER' && site.manager?.id === currentUserId);
   const { data: employees } = useApiData<Employee[]>(
@@ -529,7 +536,10 @@ export default function SiteDetailPage() {
     {
       header: 'Employé',
       cell: ({ row }) => (
-        <Link href={`/team/${row.original.user.id}`} className="font-semibold text-accent hover:underline">
+        <Link
+          href={`/team/${row.original.user.employeeProfile!.id}`}
+          className="font-semibold text-accent hover:underline"
+        >
           {row.original.user.firstName} {row.original.user.lastName}
         </Link>
       ),

@@ -345,7 +345,7 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const projectId = params?.id ?? '';
   const myRole = tokenStore.session?.role ?? '';
-  const canEdit = myRole === 'RESOURCE_MANAGER';
+  const canEdit = myRole === 'RESOURCE_MANAGER' || myRole === 'HR';
   const { data: project, refresh } = useApiData<Project>(() => api.project(projectId) as Promise<Project>, {
     ...fallbackProject,
     id: projectId,
@@ -458,7 +458,7 @@ export default function ProjectDetailPage() {
         <section className="grid gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-base font-bold text-bodyText">Sites du projet ({project.sites.length})</h2>
-            {canEdit && (
+            {myRole === 'HR' && (
               <NewProjectSiteModal
                 project={project}
                 employees={employees}

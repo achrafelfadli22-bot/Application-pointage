@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { AttendanceStatus, LeaveRequestStatus, Prisma, SiteStatus, TimesheetStatus, UserRole } from '@prisma/client';
+import { LeaveRequestStatus, Prisma, SiteStatus, TimesheetStatus, UserRole } from '@prisma/client';
 import { HierarchyService } from '../common/hierarchy.service';
 import { CurrentUserContext } from '../common/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,94 +17,127 @@ export class DashboardService {
     const userScope = managedUserIds ? { userId: { in: managedUserIds } } : {};
     const employeeScope = managedUserIds ? { userId: { in: managedUserIds } } : {};
     const siteWhere = await this.siteWhere(user);
+
     const today = this.dateOnly(new Date());
     const weekStart = new Date(today);
     weekStart.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
-    const attendanceSettings = user.role === UserRole.SUPER_ADMIN
-      ? null
-      : await this.prisma.tenantSettings.findUnique({
-          where: { tenantId: user.tenantId ?? '__missing__' },
-          select: { workDayStartTime: true, lateToleranceMinutes: true },
-        });
-    const lateThreshold = new Date(today);
-    const thresholdMinutes =
-      this.minutesFromTime(attendanceSettings?.workDayStartTime ?? '08:00') +
-      (attendanceSettings?.lateToleranceMinutes ?? 15);
-    lateThreshold.setUTCHours(Math.floor(thresholdMinutes / 60), thresholdMinutes % 60, 0, 0);
+    const chartStart = new Date(today);
+    chartStart.setUTCDate(today.getUTCDate() - 6);
+
+    const timesheetWhere: Prisma.TimesheetWhereInput = { ...tenantWhere, ...userScope };
+    const entryWhere: Prisma.TimesheetDayEntryWhereInput = {
+      ...tenantWhere,
+      entryDate: { gte: weekStart, lte: today },
+      timesheetLine: { timesheet: userScope },
+    };
 
     const [
       activeEmployees,
-      presentToday,
-      lateToday,
-      weeklyMinutes,
-      pendingTimesheets,
+      weeklyHours,
+      statusGroups,
       pendingLeave,
       activeSites,
-      latestPunches,
+      latestTimesheets,
+      chartEntries,
       pendingLeaveRequests,
-      timesheetsToApprove,
     ] = await Promise.all([
       this.prisma.employeeProfile.count({ where: { ...tenantWhere, ...employeeScope, status: 'ACTIVE' } }),
-      this.prisma.attendancePunch.count({ where: { ...tenantWhere, ...userScope, punchDate: today, checkInAt: { not: null } } }),
-      this.prisma.attendancePunch.count({
+      this.prisma.timesheetDayEntry.aggregate({ where: entryWhere, _sum: { hours: true } }),
+      this.prisma.timesheet.groupBy({
+        by: ['status'],
+        where: timesheetWhere,
+        _count: { _all: true },
+      }),
+      this.prisma.leaveRequest.count({
         where: {
           ...tenantWhere,
           ...userScope,
-          punchDate: today,
-          checkInAt: { gt: lateThreshold },
+          status: { in: [LeaveRequestStatus.SUBMITTED, LeaveRequestStatus.N1_APPROVED] },
         },
       }),
-      this.prisma.attendancePunch.aggregate({
-        where: { ...tenantWhere, ...userScope, punchDate: { gte: weekStart }, durationMinutes: { not: null } },
-        _sum: { durationMinutes: true },
-      }),
-      this.prisma.timesheet.count({
-        where: { ...tenantWhere, ...userScope, status: { in: [TimesheetStatus.SUBMITTED, TimesheetStatus.N1_APPROVED] } },
-      }),
-      this.prisma.leaveRequest.count({
-        where: { ...tenantWhere, ...userScope, status: { in: [LeaveRequestStatus.SUBMITTED, LeaveRequestStatus.N1_APPROVED] } },
-      }),
       this.prisma.site.count({ where: { ...siteWhere, status: SiteStatus.ACTIVE, deletedAt: null } }),
-      this.prisma.attendancePunch.findMany({
-        where: { ...tenantWhere, ...userScope },
-        include: { user: { select: { firstName: true, lastName: true } }, site: { select: { code: true, name: true } } },
-        orderBy: { createdAt: 'desc' },
+      this.prisma.timesheet.findMany({
+        where: timesheetWhere,
+        include: {
+          user: { select: { firstName: true, lastName: true } },
+          lines: {
+            select: {
+              entries: { select: { hours: true } },
+              site: { select: { code: true, name: true } },
+            },
+          },
+        },
+        orderBy: { updatedAt: 'desc' },
         take: 8,
+      }),
+      this.prisma.timesheetDayEntry.findMany({
+        where: {
+          ...tenantWhere,
+          entryDate: { gte: chartStart, lte: today },
+          timesheetLine: { timesheet: userScope },
+        },
+        select: { entryDate: true, hours: true },
       }),
       this.prisma.leaveRequest.findMany({
-        where: { ...tenantWhere, ...userScope, status: { in: [LeaveRequestStatus.SUBMITTED, LeaveRequestStatus.N1_APPROVED] } },
+        where: {
+          ...tenantWhere,
+          ...userScope,
+          status: { in: [LeaveRequestStatus.SUBMITTED, LeaveRequestStatus.N1_APPROVED] },
+        },
         include: { user: { select: { firstName: true, lastName: true } }, leaveType: true },
         orderBy: { createdAt: 'desc' },
-        take: 8,
-      }),
-      this.prisma.timesheet.findMany({
-        where: { ...tenantWhere, ...userScope, status: { in: [TimesheetStatus.SUBMITTED, TimesheetStatus.N1_APPROVED] } },
-        include: { user: { select: { firstName: true, lastName: true } } },
-        orderBy: { submittedAt: 'desc' },
-        take: 8,
+        take: 5,
       }),
     ]);
 
-    const absentToday = Math.max(0, activeEmployees - presentToday);
+    const statusCount = Object.fromEntries(statusGroups.map((group) => [group.status, group._count._all]));
+    const hoursByDate = new Map<string, number>();
+    for (const entry of chartEntries) {
+      const key = entry.entryDate.toISOString().slice(0, 10);
+      hoursByDate.set(key, (hoursByDate.get(key) ?? 0) + Number(entry.hours));
+    }
+
+    const hoursByDay = Array.from({ length: 7 }, (_, index) => {
+      const date = new Date(chartStart);
+      date.setUTCDate(chartStart.getUTCDate() + index);
+      const key = date.toISOString().slice(0, 10);
+      return { date: key, hours: Number((hoursByDate.get(key) ?? 0).toFixed(2)) };
+    });
 
     return {
       counters: {
         activeEmployees,
-        presentToday,
-        absentToday,
-        lateToday,
-        weeklyHours: Number(((weeklyMinutes._sum.durationMinutes ?? 0) / 60).toFixed(2)),
-        pendingTimesheets,
+        weeklyHours: Number(weeklyHours._sum.hours ?? 0),
+        pendingTimesheets:
+          (statusCount[TimesheetStatus.SUBMITTED] ?? 0) + (statusCount[TimesheetStatus.N1_APPROVED] ?? 0),
+        approvedTimesheets: statusCount[TimesheetStatus.APPROVED] ?? 0,
+        rejectedTimesheets: statusCount[TimesheetStatus.REJECTED] ?? 0,
+        draftTimesheets:
+          (statusCount[TimesheetStatus.DRAFT] ?? 0) + (statusCount[TimesheetStatus.REOPENED] ?? 0),
         pendingLeave,
         activeSites,
       },
-      latestPunches,
+      statusBreakdown: Object.values(TimesheetStatus).map((status) => ({
+        status,
+        count: statusCount[status] ?? 0,
+      })),
+      hoursByDay,
+      latestTimesheets: latestTimesheets.map((timesheet) => ({
+        id: timesheet.id,
+        periodStart: timesheet.periodStart,
+        periodEnd: timesheet.periodEnd,
+        status: timesheet.status,
+        updatedAt: timesheet.updatedAt,
+        user: timesheet.user,
+        totalHours: timesheet.lines.reduce(
+          (total, line) => total + line.entries.reduce((lineTotal, entry) => lineTotal + Number(entry.hours), 0),
+          0,
+        ),
+        sites: Array.from(
+          new Set(timesheet.lines.map((line) => line.site?.name).filter((name): name is string => Boolean(name))),
+        ),
+      })),
       pendingLeaveRequests,
-      timesheetsToApprove,
-      statusReference: {
-        attendance: AttendanceStatus.SUBMITTED,
-        timesheet: TimesheetStatus.SUBMITTED,
-      },
     };
   }
 
@@ -112,40 +145,20 @@ export class DashboardService {
     return new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), value.getUTCDate()));
   }
 
-  private minutesFromTime(value: string) {
-    const [hourRaw = '8', minuteRaw = '0'] = value.split(':');
-    const hour = Number(hourRaw);
-    const minute = Number(minuteRaw);
-
-    return (Number.isFinite(hour) ? hour : 8) * 60 + (Number.isFinite(minute) ? minute : 0);
-  }
-
   private async siteWhere(user: CurrentUserContext): Promise<Prisma.SiteWhereInput> {
-    if (user.role === UserRole.SUPER_ADMIN) {
-      return {};
-    }
-
+    if (user.role === UserRole.SUPER_ADMIN) return {};
     const tenantId = user.tenantId ?? '__missing__';
-    if (user.role === UserRole.PROJECT_MANAGER) {
-      return { tenantId, project: { projectManagerId: user.userId } };
-    }
-    if (user.role === UserRole.MANAGER) {
-      return { tenantId, managerId: user.userId };
-    }
+    if (user.role === UserRole.PROJECT_MANAGER) return { tenantId, project: { projectManagerId: user.userId } };
+    if (user.role === UserRole.MANAGER) return { tenantId, managerId: user.userId };
     if (user.role === UserRole.EMPLOYEE) {
       const today = this.dateOnly(new Date());
       return {
         tenantId,
         assignments: {
-          some: {
-            userId: user.userId,
-            startDate: { lte: today },
-            OR: [{ endDate: null }, { endDate: { gte: today } }],
-          },
+          some: { userId: user.userId, startDate: { lte: today }, OR: [{ endDate: null }, { endDate: { gte: today } }] },
         },
       };
     }
-
     return { tenantId };
   }
 }

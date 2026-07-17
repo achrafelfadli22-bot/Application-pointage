@@ -47,17 +47,14 @@ function NewProjectModal({ onCreated, clientOptions }: { onCreated: () => void; 
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { data: employees } = useApiData<Employee[]>(() => api.employees() as Promise<Employee[]>, []);
-  const managerOptions = employees.filter((employee) => employee.user.role === 'PROJECT_MANAGER');
-
   function reset() {
     setForm(emptyForm);
     setError(null);
   }
 
   async function handleSubmit() {
-    if (!form.code || !form.name || !form.projectManagerId) {
-      setError('Code, nom et chef de projet sont obligatoires.');
+    if (!form.code || !form.name) {
+      setError('Code et nom sont obligatoires.');
       return;
     }
 
@@ -65,6 +62,7 @@ function NewProjectModal({ onCreated, clientOptions }: { onCreated: () => void; 
     setError(null);
     try {
       const payload: Record<string, unknown> = { ...form };
+      delete payload.projectManagerId;
       if (!form.clientName) delete payload.clientName;
       if (!form.startDate) delete payload.startDate;
       if (!form.plannedEndDate) delete payload.plannedEndDate;
@@ -105,14 +103,9 @@ function NewProjectModal({ onCreated, clientOptions }: { onCreated: () => void; 
                   </option>
                 ))}
               </SelectField>
-              <SelectField label="Chef de projet" value={form.projectManagerId} onChange={(e) => setForm((p) => ({ ...p, projectManagerId: e.target.value }))}>
-                <option value="">Selectionner</option>
-                {managerOptions.map((employee) => (
-                  <option key={employee.user.id} value={employee.user.id}>
-                    {employee.user.firstName} {employee.user.lastName} - Chef de projet
-                  </option>
-                ))}
-              </SelectField>
+              <div className="rounded-md border border-borderSoft bg-grayCard/40 px-3 py-2 text-sm text-mutedText">
+                Le Resource Manager affectera le chef de projet après la création.
+              </div>
               <SelectField label="Etat du projet" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
                 <option value="ACTIVE">Actif</option>
                 <option value="SUSPENDED">Suspendu</option>
@@ -145,7 +138,7 @@ export default function ProjectsPage() {
     { siteRoleOptions: [], clientOptions: [] },
   );
   const myRole = tokenStore.session?.role ?? '';
-  const canCreate = myRole === 'RESOURCE_MANAGER';
+  const canCreate = myRole === 'HR';
   const clientOptions = Array.from(
     new Set(
       [...(siteOptions.clientOptions ?? []), ...data.map((project) => project.clientName)]

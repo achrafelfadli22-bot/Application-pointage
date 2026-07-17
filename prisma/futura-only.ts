@@ -6,6 +6,7 @@ const password = process.env.DEMO_PASSWORD ?? 'Password123!';
 const FUTURA_SLUG = 'futura-expertise';
 const FUTURA_EMAIL = 'contact@futura-expert.com';
 const RESOURCE_MANAGER_EMAIL = 'a.elyoussefi@futura-expert.com';
+const HR_EMAIL = 'rh@futura-expert.com';
 
 async function main() {
   const passwordHash = await bcrypt.hash(password, 12);
@@ -95,6 +96,51 @@ async function main() {
       userId: resourceManager.id,
       employeeNumber: 'FE-RM-001',
       jobTitle: 'Ressource Manager',
+      contractType: 'CDI',
+      hireDate: new Date('2026-01-01'),
+      annualLeaveBalance: 18,
+      status: 'ACTIVE',
+    },
+  });
+
+  const hrPasswordHash = await bcrypt.hash('123456789', 12);
+  const hr = await prisma.user.upsert({
+    where: { email: HR_EMAIL },
+    update: {
+      tenantId: futura.id,
+      passwordHash: hrPasswordHash,
+      firstName: 'Responsable',
+      lastName: 'RH',
+      role: UserRole.HR,
+      status: UserStatus.ACTIVE,
+      deletedAt: null,
+    },
+    create: {
+      tenantId: futura.id,
+      email: HR_EMAIL,
+      passwordHash: hrPasswordHash,
+      firstName: 'Responsable',
+      lastName: 'RH',
+      role: UserRole.HR,
+      status: UserStatus.ACTIVE,
+    },
+  });
+
+  await prisma.employeeProfile.upsert({
+    where: { userId: hr.id },
+    update: {
+      tenantId: futura.id,
+      employeeNumber: 'FE-RH-001',
+      jobTitle: 'Responsable RH',
+      contractType: 'CDI',
+      hireDate: new Date('2026-01-01'),
+      status: 'ACTIVE',
+    },
+    create: {
+      tenantId: futura.id,
+      userId: hr.id,
+      employeeNumber: 'FE-RH-001',
+      jobTitle: 'Responsable RH',
       contractType: 'CDI',
       hireDate: new Date('2026-01-01'),
       annualLeaveBalance: 18,

@@ -33,7 +33,7 @@ export class SitesController {
   }
 
   @Post()
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.HR)
   create(@CurrentUser() user: CurrentUserContext, @Body() dto: CreateSiteDto) {
     return this.service.create(user, dto);
   }
@@ -45,19 +45,19 @@ export class SitesController {
   }
 
   @Put(':id')
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.RESOURCE_MANAGER, UserRole.HR)
   update(@CurrentUser() user: CurrentUserContext, @Param('id') id: string, @Body() dto: UpdateSiteDto) {
     return this.service.update(user, id, dto);
   }
 
   @Delete(':id')
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.HR)
   softDelete(@CurrentUser() user: CurrentUserContext, @Param('id') id: string) {
     return this.service.softDelete(user, id);
   }
 
   @Post(':id/assignments')
-  @Roles(UserRole.RESOURCE_MANAGER, UserRole.HR, UserRole.MANAGER)
+  @Roles(UserRole.RESOURCE_MANAGER)
   assign(@CurrentUser() user: CurrentUserContext, @Param('id') id: string, @Body() dto: CreateSiteAssignmentDto) {
     return this.service.assign(user, id, dto);
   }

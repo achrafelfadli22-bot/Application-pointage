@@ -59,7 +59,10 @@ export class ProjectsService {
       throw new ForbiddenException('Tenant scope is required');
     }
 
-    await this.assertProjectManager(user.tenantId, dto.projectManagerId);
+    const defaultManager = await this.prisma.user.findFirstOrThrow({
+      where: { tenantId: user.tenantId, role: UserRole.RESOURCE_MANAGER, status: UserStatus.ACTIVE, deletedAt: null },
+      select: { id: true },
+    });
 
     const project = await this.prisma.project.create({
       data: {
@@ -67,7 +70,7 @@ export class ProjectsService {
         code: dto.code,
         name: dto.name,
         clientName: dto.clientName,
-        projectManagerId: dto.projectManagerId,
+        projectManagerId: defaultManager.id,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
         status: dto.status,
@@ -94,15 +97,17 @@ export class ProjectsService {
 
     const project = await this.prisma.project.update({
       where: { id },
-      data: {
-        code: dto.code,
-        name: dto.name,
-        clientName: dto.clientName,
-        projectManagerId: dto.projectManagerId,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
-        status: dto.status,
-      },
+      data:
+        user.role === UserRole.RESOURCE_MANAGER
+          ? { projectManagerId: dto.projectManagerId }
+          : {
+              code: dto.code,
+              name: dto.name,
+              clientName: dto.clientName,
+              startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+              plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
+              status: dto.status,
+            },
     });
 
     await this.auditLog.log({

@@ -113,7 +113,7 @@ export class EmployeesService {
     if (!user.tenantId) {
       throw new ForbiddenException('Tenant scope is required');
     }
-    this.assertTenantUserRole(dto.role);
+    const creationRole = UserRole.EMPLOYEE;
 
     const passwordSetupRequired = !dto.password;
     const rawPassword = dto.password ?? this.generateTemporaryPassword();
@@ -127,7 +127,7 @@ export class EmployeesService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       phone: dto.phone,
-      role: dto.role,
+      role: creationRole,
       profileData: {
         employeeNumber: dto.employeeNumber,
         jobTitle: dto.jobTitle,
@@ -159,13 +159,23 @@ export class EmployeesService {
   async update(user: CurrentUserContext, id: string, dto: UpdateEmployeeDto) {
     const employee = await this.repository.findFirst({
       where: { id, ...(this.tenantFilter(user) as Prisma.EmployeeProfileWhereInput) },
+      include: { user: { select: { role: true } } },
     });
 
     if (!employee) {
       throw new NotFoundException('Employee not found');
     }
-    if (dto.role) {
-      this.assertTenantUserRole(dto.role);
+    if (user.role === UserRole.HR && dto.role && dto.role !== employee.user.role) {
+      throw new ForbiddenException("Le RH ne peut pas attribuer les roles applicatifs.");
+    }
+    if (user.role === UserRole.RESOURCE_MANAGER && dto.role) {
+      if (
+        dto.role !== UserRole.EMPLOYEE &&
+        dto.role !== UserRole.MANAGER &&
+        dto.role !== UserRole.PROJECT_MANAGER
+      ) {
+        throw new ForbiddenException('Le Resource Manager peut attribuer uniquement les roles operationnels.');
+      }
     }
 
     assertStrongPassword(dto.password, this.config);
@@ -174,24 +184,28 @@ export class EmployeesService {
     const updated = await this.repository.updateWithUser({
       id,
       userId: employee.userId,
-      userData: {
-        email: dto.email?.toLowerCase(),
-        passwordHash,
-        firstName: dto.firstName,
-        lastName: dto.lastName,
-        phone: dto.phone,
-        role: dto.role,
-      },
-      profileData: {
-        employeeNumber: dto.employeeNumber,
-        jobTitle: dto.jobTitle,
-        contractType: dto.contractType,
-        hireDate: dto.hireDate ? new Date(dto.hireDate) : undefined,
-        mainSiteId: dto.mainSiteId,
-        annualLeaveBalance: dto.annualLeaveBalance,
-        hourlyRate: dto.hourlyRate,
-        status: dto.status,
-      },
+      userData:
+        user.role === UserRole.HR
+          ? {
+              email: dto.email?.toLowerCase(),
+              passwordHash,
+              firstName: dto.firstName,
+              lastName: dto.lastName,
+              phone: dto.phone,
+            }
+          : { role: dto.role },
+      profileData:
+        user.role === UserRole.HR
+          ? {
+              employeeNumber: dto.employeeNumber,
+              jobTitle: dto.jobTitle,
+              contractType: dto.contractType,
+              hireDate: dto.hireDate ? new Date(dto.hireDate) : undefined,
+              annualLeaveBalance: dto.annualLeaveBalance,
+              hourlyRate: dto.hourlyRate,
+              status: dto.status,
+            }
+          : { mainSiteId: dto.mainSiteId },
     });
 
     await this.auditLog.log({
@@ -221,8 +235,12 @@ export class EmployeesService {
       throw new ForbiddenException('Vous ne pouvez pas supprimer votre propre compte.');
     }
 
-    if (employee.user.role !== UserRole.EMPLOYEE && employee.user.role !== UserRole.MANAGER) {
-      throw new ForbiddenException('Le Ressource Manager peut supprimer uniquement les employes et les managers.');
+    if (
+      employee.user.role !== UserRole.EMPLOYEE &&
+      employee.user.role !== UserRole.MANAGER &&
+      employee.user.role !== UserRole.PROJECT_MANAGER
+    ) {
+      throw new ForbiddenException('Le RH peut supprimer uniquement les profils operationnels.');
     }
 
     const deleted = await this.repository.deactivateEmployee(employee, new Date());

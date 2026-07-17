@@ -168,13 +168,11 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
   const isReopener = ['RESOURCE_MANAGER', 'HR'].includes(myRole);
 
   const isDraftOrReopened = ['DRAFT', 'REOPENED'].includes(timesheet.status);
-  const isApprovedOrRejected = ['APPROVED', 'REJECTED'].includes(timesheet.status);
-
   const canEdit = timesheet.permissions?.canEdit ?? (isDraftOrReopened && (isOwner || isEditor));
   const canApproveGlobal = timesheet.permissions?.canApproveGlobal ?? false;
   const canRejectGlobal = timesheet.permissions?.canRejectGlobal ?? false;
   const canSubmit = isDraftOrReopened && (isOwner || isEditor);
-  const canReopen = isApprovedOrRejected && isReopener;
+  const canReopen = timesheet.status === 'REJECTED' && isReopener;
   const canDelete = timesheet.status === 'DRAFT' && isOwner;
   const calendarEventsByDate = useMemo(() => {
     if (timesheet.calendarEvents?.byDate) return timesheet.calendarEvents.byDate;

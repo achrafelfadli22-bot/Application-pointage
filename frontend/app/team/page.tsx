@@ -56,7 +56,7 @@ const fallbackJobTitleOptions = [
 
 const emptyForm = {
   firstName: '', lastName: '', email: '',
-  phone: '', role: 'EMPLOYEE', employeeNumber: '', jobTitle: '',
+  phone: '', employeeNumber: '', jobTitle: '',
   contractType: 'CDI', hireDate: '', annualLeaveBalance: 18, hourlyRate: 85,
 };
 
@@ -90,7 +90,7 @@ function NewEmployeeModal({ jobTitleOptions, onCreated }: { jobTitleOptions: str
     setSubmitting(true);
     setError(null);
     try {
-      await api.createEmployee(form as unknown as Record<string, unknown>);
+      await api.createEmployee({ ...form, role: 'EMPLOYEE' } as unknown as Record<string, unknown>);
       setOpen(false);
       setForm(emptyForm);
       onCreated();
@@ -134,20 +134,6 @@ function NewEmployeeModal({ jobTitleOptions, onCreated }: { jobTitleOptions: str
                   </option>
                 ))}
               </SelectField>
-              <label className="grid gap-1">
-                <span className="text-sm font-semibold text-bodyText">Rôle</span>
-                <select
-                  value={form.role}
-                  onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))}
-                  className="h-10 rounded-md border border-borderSoft bg-white px-3 text-sm outline-none focus:border-accent"
-                >
-                  <option value="EMPLOYEE">Employé</option>
-                  <option value="MANAGER">Chef de site</option>
-                  <option value="PROJECT_MANAGER">Chef de projet</option>
-                  <option value="HR">RH</option>
-                  <option value="RESOURCE_MANAGER">Ressource Manager</option>
-                </select>
-              </label>
               <label className="grid gap-1">
                 <span className="text-sm font-semibold text-bodyText">Type de contrat</span>
                 <select
@@ -207,7 +193,7 @@ export default function TeamPage() {
   const [siteFilter, setSiteFilter] = useState('');
   const [actionError, setActionError] = useState<string | null>(null);
   const myRole = tokenStore.session?.role ?? '';
-  const canManageEmployees = myRole === 'RESOURCE_MANAGER';
+  const canManageEmployees = myRole === 'HR';
   const { data, refresh } = useApiData<Employee[]>(() => api.employees() as Promise<Employee[]>, []);
   const { data: sites } = useApiData<Site[]>(() => api.sites() as Promise<Site[]>, []);
   const { data: siteOptions } = useApiData<SiteOptions>(

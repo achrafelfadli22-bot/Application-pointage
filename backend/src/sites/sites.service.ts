@@ -52,7 +52,16 @@ export class SitesService {
         manager: { select: { id: true, firstName: true, lastName: true, email: true } },
         assignments: {
           include: {
-            user: { select: { id: true, firstName: true, lastName: true, email: true, role: true } },
+            user: {
+              select: {
+                id: true,
+                firstName: true,
+                lastName: true,
+                email: true,
+                role: true,
+                employeeProfile: { select: { id: true } },
+              },
+            },
           },
           orderBy: { startDate: 'desc' },
         },
@@ -84,7 +93,7 @@ export class SitesService {
         address: dto.address,
         city: dto.city,
         country: dto.country,
-        managerId: dto.managerId,
+        managerId: undefined,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
         status: dto.status,
@@ -115,23 +124,25 @@ export class SitesService {
 
     const site = await this.repository.update({
       where: { id },
-      data: {
-        projectId: dto.projectId,
-        code: dto.code,
-        name: dto.name,
-        clientName: dto.clientName,
-        address: dto.address,
-        city: dto.city,
-        country: dto.country,
-        managerId: dto.managerId,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
-        status: dto.status,
-        progressPercent: dto.progressPercent,
-        latitude: dto.latitude,
-        longitude: dto.longitude,
-        gpsRadiusMeters: dto.gpsRadiusMeters,
-      },
+      data:
+        user.role === UserRole.RESOURCE_MANAGER
+          ? { managerId: dto.managerId }
+          : {
+              projectId: dto.projectId,
+              code: dto.code,
+              name: dto.name,
+              clientName: dto.clientName,
+              address: dto.address,
+              city: dto.city,
+              country: dto.country,
+              startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+              plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
+              status: dto.status,
+              progressPercent: dto.progressPercent,
+              latitude: dto.latitude,
+              longitude: dto.longitude,
+              gpsRadiusMeters: dto.gpsRadiusMeters,
+            },
     });
 
     await this.auditLog.log({

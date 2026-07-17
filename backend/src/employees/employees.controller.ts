@@ -27,7 +27,7 @@ export class EmployeesController {
   }
 
   @Post()
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.HR)
   create(@CurrentUser() user: CurrentUserContext, @Body() dto: CreateEmployeeDto) {
     return this.service.create(user, dto);
   }
@@ -39,13 +39,13 @@ export class EmployeesController {
   }
 
   @Put(':id')
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.RESOURCE_MANAGER, UserRole.HR)
   update(@CurrentUser() user: CurrentUserContext, @Param('id') id: string, @Body() dto: UpdateEmployeeDto) {
     return this.service.update(user, id, dto);
   }
 
   @Delete(':id')
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.HR)
   softDelete(@CurrentUser() user: CurrentUserContext, @Param('id') id: string) {
     return this.service.softDelete(user, id);
   }

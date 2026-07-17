@@ -15,7 +15,6 @@ import { DataTable } from '@/components/ui/data-table';
 import { DateField, FormField, SelectField } from '@/components/ui/form-fields';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { api, tokenStore } from '@/lib/api-client';
-import { demoEmployees } from '@/lib/demo-data';
 import { ROLE_LABELS } from '@/lib/nav-items';
 import { useApiData } from '@/lib/use-api-data';
 
@@ -51,18 +50,37 @@ type LeaveBalance = {
   leaveType: { name: string; code: string; isPaid: boolean };
 };
 
-type AttendancePunch = {
+type EmployeeTimesheet = {
   id: string;
-  punchDate: string;
-  checkInAt?: string;
-  checkOutAt?: string;
-  durationMinutes?: number;
+  periodStart: string;
+  periodEnd: string;
+  updatedAt: string;
   status: string;
-  site?: { code: string; name: string } | null;
+  user: { id: string };
+  lines: Array<{ entries: Array<{ hours: number | string }> }>;
 };
 
-type Site = { id: string; code: string; name: string };
 type SiteOptions = { jobTitleOptions?: string[] };
+
+const emptyEmployee: Employee = {
+  id: '',
+  employeeNumber: '',
+  jobTitle: '',
+  contractType: '',
+  hireDate: '',
+  annualLeaveBalance: 0,
+  status: '',
+  user: {
+    id: '',
+    firstName: '',
+    lastName: '',
+    email: '',
+    phone: '',
+    role: '',
+    status: '',
+  },
+  mainSite: null,
+};
 
 const fallbackJobTitleOptions = [
   'Ressource Manager',
@@ -88,17 +106,12 @@ function dateInput(value?: string | null) {
   return value ? value.slice(0, 10) : '';
 }
 
-function EditEmployeeModal({
-  employee,
-  sites,
-  jobTitleOptions,
-  onUpdated,
-}: {
+function EditEmployeeModal({ employee, jobTitleOptions, onUpdated }: {
   employee: Employee;
-  sites: Site[];
   jobTitleOptions: string[];
   onUpdated: () => void;
 }) {
+  const isHR = true;
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     firstName: employee.user.firstName,
@@ -106,12 +119,10 @@ function EditEmployeeModal({
     email: employee.user.email,
     phone: employee.user.phone ?? '',
     password: '',
-    role: employee.user.role,
     employeeNumber: employee.employeeNumber,
     jobTitle: employee.jobTitle,
     contractType: employee.contractType,
     hireDate: dateInput(employee.hireDate),
-    mainSiteId: employee.mainSite?.id ?? '',
     annualLeaveBalance: employee.annualLeaveBalance ?? 0,
     hourlyRate: employee.hourlyRate ?? '',
     status: employee.status,
@@ -127,12 +138,10 @@ function EditEmployeeModal({
       email: employee.user.email,
       phone: employee.user.phone ?? '',
       password: '',
-      role: employee.user.role,
       employeeNumber: employee.employeeNumber,
       jobTitle: employee.jobTitle,
       contractType: employee.contractType,
       hireDate: dateInput(employee.hireDate),
-      mainSiteId: employee.mainSite?.id ?? '',
       annualLeaveBalance: employee.annualLeaveBalance ?? 0,
       hourlyRate: employee.hourlyRate ?? '',
       status: employee.status,
@@ -145,7 +154,7 @@ function EditEmployeeModal({
   }
 
   async function handleSubmit() {
-    if (!form.firstName || !form.lastName || !form.email || !form.employeeNumber || !form.jobTitle || !form.hireDate) {
+    if (isHR && (!form.firstName || !form.lastName || !form.email || !form.employeeNumber || !form.jobTitle || !form.hireDate)) {
       setError("Prenom, nom, email, matricule, poste et date d'embauche sont obligatoires.");
       return;
     }
@@ -154,21 +163,19 @@ function EditEmployeeModal({
     setError(null);
     try {
       const payload: Record<string, unknown> = {
-        firstName: form.firstName,
-        lastName: form.lastName,
-        email: form.email,
-        phone: form.phone || null,
-        role: form.role,
-        employeeNumber: form.employeeNumber,
-        jobTitle: form.jobTitle,
-        contractType: form.contractType,
-        hireDate: form.hireDate,
-        mainSiteId: form.mainSiteId || null,
-        annualLeaveBalance: Number(form.annualLeaveBalance),
-        hourlyRate: form.hourlyRate === '' ? null : Number(form.hourlyRate),
-        status: form.status,
+            firstName: form.firstName,
+            lastName: form.lastName,
+            email: form.email,
+            phone: form.phone || null,
+            employeeNumber: form.employeeNumber,
+            jobTitle: form.jobTitle,
+            contractType: form.contractType,
+            hireDate: form.hireDate,
+            annualLeaveBalance: Number(form.annualLeaveBalance),
+            hourlyRate: form.hourlyRate === '' ? null : Number(form.hourlyRate),
+            status: form.status,
       };
-      if (form.password) payload.password = form.password;
+      if (isHR && form.password) payload.password = form.password;
 
       await api.updateEmployee(employee.id, payload);
       setOpen(false);
@@ -200,20 +207,13 @@ function EditEmployeeModal({
 
           <div className="grid gap-4 p-5">
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Prenom" value={form.firstName} onChange={(event) => patch('firstName', event.target.value)} />
-              <FormField label="Nom" value={form.lastName} onChange={(event) => patch('lastName', event.target.value)} />
-              <FormField label="Email" type="email" value={form.email} onChange={(event) => patch('email', event.target.value)} />
-              <FormField label="Telephone" value={form.phone} onChange={(event) => patch('phone', event.target.value)} />
-              <FormField label="Nouveau mot de passe" type="password" value={form.password} onChange={(event) => patch('password', event.target.value)} />
-              <SelectField label="Role" value={form.role} onChange={(event) => patch('role', event.target.value)}>
-                <option value="EMPLOYEE">Employe</option>
-                <option value="MANAGER">Chef de site</option>
-                <option value="PROJECT_MANAGER">Chef de projet</option>
-                <option value="HR">RH</option>
-                <option value="RESOURCE_MANAGER">Ressource Manager</option>
-              </SelectField>
-              <FormField label="Matricule" value={form.employeeNumber} onChange={(event) => patch('employeeNumber', event.target.value)} />
-              <SelectField label="Poste" value={form.jobTitle} onChange={(event) => patch('jobTitle', event.target.value)}>
+              <FormField disabled={!isHR} label="Prenom" value={form.firstName} onChange={(event) => patch('firstName', event.target.value)} />
+              <FormField disabled={!isHR} label="Nom" value={form.lastName} onChange={(event) => patch('lastName', event.target.value)} />
+              <FormField disabled={!isHR} label="Email" type="email" value={form.email} onChange={(event) => patch('email', event.target.value)} />
+              <FormField disabled={!isHR} label="Telephone" value={form.phone} onChange={(event) => patch('phone', event.target.value)} />
+              <FormField disabled={!isHR} label="Nouveau mot de passe" type="password" value={form.password} onChange={(event) => patch('password', event.target.value)} />
+              <FormField disabled={!isHR} label="Matricule" value={form.employeeNumber} onChange={(event) => patch('employeeNumber', event.target.value)} />
+              <SelectField disabled={!isHR} label="Poste" value={form.jobTitle} onChange={(event) => patch('jobTitle', event.target.value)}>
                 <option value="">Choisir un poste</option>
                 {jobTitleOptions.map((option) => (
                   <option key={option} value={option}>
@@ -221,22 +221,14 @@ function EditEmployeeModal({
                   </option>
                 ))}
               </SelectField>
-              <SelectField label="Type de contrat" value={form.contractType} onChange={(event) => patch('contractType', event.target.value)}>
+              <SelectField disabled={!isHR} label="Type de contrat" value={form.contractType} onChange={(event) => patch('contractType', event.target.value)}>
                 <option value="CDI">CDI</option>
                 <option value="CDD">CDD</option>
                 <option value="INTERIM">Interim</option>
                 <option value="FREELANCE">Freelance</option>
               </SelectField>
-              <DateField label="Date d'embauche" value={form.hireDate} onChange={(event) => patch('hireDate', event.target.value)} />
-              <SelectField label="Site principal" value={form.mainSiteId} onChange={(event) => patch('mainSiteId', event.target.value)}>
-                <option value="">Aucun</option>
-                {sites.map((site) => (
-                  <option key={site.id} value={site.id}>
-                    {site.code} - {site.name}
-                  </option>
-                ))}
-              </SelectField>
-              <SelectField label="Statut employe" value={form.status} onChange={(event) => patch('status', event.target.value)}>
+              <DateField disabled={!isHR} label="Date d'embauche" value={form.hireDate} onChange={(event) => patch('hireDate', event.target.value)} />
+              <SelectField disabled={!isHR} label="Statut employe" value={form.status} onChange={(event) => patch('status', event.target.value)}>
                 <option value="ACTIVE">Actif</option>
                 <option value="INACTIVE">Inactif</option>
                 <option value="SUSPENDED">Suspendu</option>
@@ -244,6 +236,7 @@ function EditEmployeeModal({
               <FormField
                 label="Solde congés annuel (jours)"
                 type="number"
+                disabled={!isHR}
                 min={0}
                 value={form.annualLeaveBalance}
                 onChange={(event) => patch('annualLeaveBalance', Number(event.target.value))}
@@ -251,6 +244,7 @@ function EditEmployeeModal({
               <FormField
                 label="Taux horaire (MAD)"
                 type="number"
+                disabled={!isHR}
                 min={0}
                 value={form.hourlyRate}
                 onChange={(event) => patch('hourlyRate', event.target.value === '' ? '' : Number(event.target.value))}
@@ -277,17 +271,13 @@ export default function EmployeeDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const employeeId = params?.id ?? '';
-  const fallback = (demoEmployees.find((e) => e.id === employeeId) ?? demoEmployees[0]) as Employee;
   const myRole = tokenStore.session?.role ?? '';
-  const canEdit = myRole === 'RESOURCE_MANAGER';
+  const canEdit = myRole === 'HR';
 
-  const { data: employee, refresh } = useApiData<Employee>(
+  const { data: employee, loading, error, refresh } = useApiData<Employee>(
     () => api.employee(employeeId) as Promise<Employee>,
-    fallback,
-  );
-  const { data: sites } = useApiData<Site[]>(
-    () => (canEdit ? (api.sites() as Promise<Site[]>) : Promise.resolve([])),
-    [],
+    emptyEmployee,
+    { fallbackMode: 'never' },
   );
   const { data: siteOptions } = useApiData<SiteOptions>(
     () => (canEdit ? (api.settingsSiteOptions() as Promise<SiteOptions>) : Promise.resolve({ jobTitleOptions: fallbackJobTitleOptions })),
@@ -302,11 +292,12 @@ export default function EmployeeDetailPage() {
   );
 
   const [balances, setBalances] = useState<LeaveBalance[]>([]);
-  const [punches, setPunches] = useState<AttendancePunch[]>([]);
+  const [timesheets, setTimesheets] = useState<EmployeeTimesheet[]>([]);
   const [loadingBalances, setLoadingBalances] = useState(true);
-  const [loadingPunches, setLoadingPunches] = useState(true);
+  const [loadingTimesheets, setLoadingTimesheets] = useState(true);
 
   useEffect(() => {
+    if (!employee.user.id) return;
     setLoadingBalances(true);
     api
       .leaveBalances(employee.user.id)
@@ -314,46 +305,41 @@ export default function EmployeeDetailPage() {
       .catch(() => {})
       .finally(() => setLoadingBalances(false));
 
-    setLoadingPunches(true);
+    setLoadingTimesheets(true);
     api
-      .attendance()
+      .timesheets()
       .then((data) => {
-        const all = data as AttendancePunch[];
-        setPunches(all.slice(0, 10));
+        const all = data as EmployeeTimesheet[];
+        setTimesheets(all.filter((timesheet) => timesheet.user.id === employee.user.id).slice(0, 10));
       })
       .catch(() => {})
-      .finally(() => setLoadingPunches(false));
+      .finally(() => setLoadingTimesheets(false));
   }, [employee.user.id]);
 
-  const punchColumns: ColumnDef<AttendancePunch, unknown>[] = [
+  const timesheetColumns: ColumnDef<EmployeeTimesheet, unknown>[] = [
     {
-      header: 'Date',
-      cell: ({ row }) => new Date(row.original.punchDate).toLocaleDateString('fr-FR'),
+      header: 'Période',
+      cell: ({ row }) => (
+        <Link href={`/timesheets/${row.original.id}`} className="font-semibold text-accent hover:underline">
+          {new Date(row.original.periodStart).toLocaleDateString('fr-FR')} –{' '}
+          {new Date(row.original.periodEnd).toLocaleDateString('fr-FR')}
+        </Link>
+      ),
     },
     {
-      header: 'Site',
-      cell: ({ row }) => row.original.site?.name ?? '—',
+      header: 'Lignes',
+      cell: ({ row }) => row.original.lines.length,
     },
     {
-      header: 'Entrée',
-      cell: ({ row }) =>
-        row.original.checkInAt
-          ? new Date(row.original.checkInAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-          : '—',
-    },
-    {
-      header: 'Sortie',
-      cell: ({ row }) =>
-        row.original.checkOutAt
-          ? new Date(row.original.checkOutAt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-          : '—',
-    },
-    {
-      header: 'Durée',
-      cell: ({ row }) =>
-        row.original.durationMinutes != null
-          ? `${(row.original.durationMinutes / 60).toFixed(1)} h`
-          : '—',
+      header: 'Total',
+      cell: ({ row }) => {
+        const total = row.original.lines.reduce(
+          (sheetTotal, line) =>
+            sheetTotal + line.entries.reduce((lineTotal, entry) => lineTotal + Number(entry.hours), 0),
+          0,
+        );
+        return `${total.toFixed(1)} h`;
+      },
     },
     {
       header: 'Statut',
@@ -365,7 +351,7 @@ export default function EmployeeDetailPage() {
   const currentYearBalances = balances.filter((b) => b.year === currentYear);
   const totalUsedDays = currentYearBalances.reduce((acc, b) => acc + Number(b.usedDays), 0);
   const totalRemainingDays = currentYearBalances.reduce((acc, b) => acc + Number(b.remainingDays), 0);
-  const canDelete = canEdit && ['EMPLOYEE', 'MANAGER'].includes(employee.user.role);
+  const canDelete = myRole === 'HR' && ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER'].includes(employee.user.role);
 
   async function handleDelete() {
     await api.deleteEmployee(employee.id);
@@ -373,8 +359,13 @@ export default function EmployeeDetailPage() {
   }
 
   return (
-    <AppShell>
+    <AppShell loading={loading}>
       <div className="grid gap-6">
+        {error && (
+          <div className="rounded-lg border border-dangerBorder bg-dangerBg px-4 py-3 text-sm text-dangerText">
+            {error}
+          </div>
+        )}
         <div>
           <Link
             href="/team"
@@ -389,7 +380,7 @@ export default function EmployeeDetailPage() {
             actions={
               canEdit ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <EditEmployeeModal employee={employee} sites={sites} jobTitleOptions={jobTitleOptions} onUpdated={refresh} />
+                  <EditEmployeeModal employee={employee} jobTitleOptions={jobTitleOptions} onUpdated={refresh} />
                   {canDelete && (
                     <ConfirmDialog
                       title="Supprimer la ressource"
@@ -416,7 +407,7 @@ export default function EmployeeDetailPage() {
             { label: 'Rôle', value: ROLE_LABELS[employee.user.role] ?? employee.user.role },
             { label: 'Jours pris', value: `${totalUsedDays} j` },
             { label: 'Solde restant', value: `${totalRemainingDays} j` },
-            { label: 'Pointages récents', value: punches.length },
+            { label: 'Feuilles récentes', value: timesheets.length },
           ]}
         />
 
@@ -525,13 +516,13 @@ export default function EmployeeDetailPage() {
           )}
         </section>
 
-        {/* Derniers pointages */}
+        {/* Dernières feuilles de temps */}
         <section className="grid gap-3">
-          <h2 className="text-base font-bold text-bodyText">Derniers pointages</h2>
-          {loadingPunches ? (
+          <h2 className="text-base font-bold text-bodyText">Dernières feuilles de temps</h2>
+          {loadingTimesheets ? (
             <p className="text-sm text-mutedText">Chargement…</p>
           ) : (
-            <DataTable columns={punchColumns} data={punches} />
+            <DataTable columns={timesheetColumns} data={timesheets} />
           )}
         </section>
       </div>

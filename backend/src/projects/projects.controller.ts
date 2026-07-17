@@ -32,7 +32,7 @@ export class ProjectsController {
   }
 
   @Post()
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.HR)
   create(@CurrentUser() user: CurrentUserContext, @Body() dto: CreateProjectDto) {
     return this.service.create(user, dto);
   }
@@ -51,13 +51,13 @@ export class ProjectsController {
   }
 
   @Put(':id')
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.RESOURCE_MANAGER, UserRole.HR)
   update(@CurrentUser() user: CurrentUserContext, @Param('id') id: string, @Body() dto: UpdateProjectDto) {
     return this.service.update(user, id, dto);
   }
 
   @Delete(':id')
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.HR)
   softDelete(@CurrentUser() user: CurrentUserContext, @Param('id') id: string) {
     return this.service.softDelete(user, id);
   }
