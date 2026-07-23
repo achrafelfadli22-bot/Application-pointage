@@ -51,13 +51,11 @@ export class TimesheetsController {
   }
 
   @Post(':id/approve')
-  @Roles(UserRole.RESOURCE_MANAGER, UserRole.HR, UserRole.PROJECT_MANAGER, UserRole.MANAGER)
   approve(@CurrentUser() user: CurrentUserContext, @Param('id') id: string) {
     return this.service.approve(user, id);
   }
 
   @Post(':id/reject')
-  @Roles(UserRole.RESOURCE_MANAGER, UserRole.HR, UserRole.PROJECT_MANAGER, UserRole.MANAGER)
   reject(@CurrentUser() user: CurrentUserContext, @Param('id') id: string, @Body() dto: RejectTimesheetDto) {
     return this.service.reject(user, id, dto.reason);
   }

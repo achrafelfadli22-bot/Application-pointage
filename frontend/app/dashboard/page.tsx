@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { ColumnDef } from '@tanstack/react-table';
 import { Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Building2, CheckCircle2, ClipboardList, Clock4, FileClock, Users, XCircle } from 'lucide-react';
+import { BarChart3, Building2, CheckCircle2, ClipboardList, Clock4, FileClock, Users, XCircle } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { DataTable } from '@/components/ui/data-table';
@@ -27,6 +27,8 @@ type DashboardData = {
   counters: {
     activeEmployees: number;
     weeklyHours: number;
+    plannedWeeklyHours: number;
+    weeklyVariance: number;
     pendingTimesheets: number;
     approvedTimesheets: number;
     rejectedTimesheets: number;
@@ -36,6 +38,7 @@ type DashboardData = {
   };
   statusBreakdown: Array<{ status: string; count: number }>;
   hoursByDay: Array<{ date: string; hours: number }>;
+  plannedVsActualByDay: Array<{ date: string; planned: number; actual: number }>;
   latestTimesheets: DashboardTimesheet[];
 };
 
@@ -43,6 +46,8 @@ const fallback: DashboardData = {
   counters: {
     activeEmployees: 0,
     weeklyHours: 0,
+    plannedWeeklyHours: 0,
+    weeklyVariance: 0,
     pendingTimesheets: 0,
     approvedTimesheets: 0,
     rejectedTimesheets: 0,
@@ -52,6 +57,7 @@ const fallback: DashboardData = {
   },
   statusBreakdown: [],
   hoursByDay: [],
+  plannedVsActualByDay: [],
   latestTimesheets: [],
 };
 
@@ -129,21 +135,9 @@ export default function DashboardPage() {
       header: 'Statut',
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
     },
-    {
-      id: 'actions',
-      header: '',
-      cell: ({ row }) => (
-        <Link
-          href={`/timesheets/${row.original.id}`}
-          className="font-medium text-accent hover:underline"
-        >
-          Consulter
-        </Link>
-      ),
-    }
   ];
 
-  const hoursChart = data.hoursByDay.map((item) => ({
+  const hoursChart = data.plannedVsActualByDay.map((item) => ({
     ...item,
     day: new Date(`${item.date}T00:00:00Z`).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }),
   }));
@@ -166,6 +160,8 @@ export default function DashboardPage() {
           <>
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <Kpi label="Heures de la semaine" value={`${data.counters.weeklyHours.toFixed(1)} h`} caption="Heures saisies dans les feuilles de temps" href="/timesheets" icon={Clock4} />
+              <Kpi label="Heures planifiées" value={`${data.counters.plannedWeeklyHours.toFixed(1)} h`} caption="Planifications publiées de la semaine" href="/dashboard" icon={FileClock} />
+              <Kpi label="Écart réalisé / planifié" value={`${data.counters.weeklyVariance >= 0 ? '+' : ''}${data.counters.weeklyVariance.toFixed(1)} h`} caption="Valeur positive : dépassement du planifié" href="/dashboard" icon={BarChart3} />
               <Kpi label="À valider" value={data.counters.pendingTimesheets} caption="Feuilles en cours de validation" href="/timesheets" icon={FileClock} />
               <Kpi label="Approuvées" value={data.counters.approvedTimesheets} caption="Feuilles validées définitivement" href="/timesheets" icon={CheckCircle2} />
               <Kpi label="Refusées" value={data.counters.rejectedTimesheets} caption="Feuilles à corriger" href="/timesheets" icon={XCircle} />
@@ -176,13 +172,14 @@ export default function DashboardPage() {
 
             <div className="grid gap-4 lg:grid-cols-2">
               <section className="rounded-xl border border-borderSoft bg-surface p-5 shadow-card">
-                <h2 className="mb-4 font-semibold text-bodyText">Heures déclarées – 7 derniers jours</h2>
+                <h2 className="mb-4 font-semibold text-bodyText">Planifié et réalisé – semaine en cours</h2>
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={hoursChart} barSize={28}>
                     <XAxis dataKey="day" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                     <YAxis tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={35} />
-                    <Tooltip formatter={(value: number) => [`${value.toFixed(1)} h`, 'Heures']} />
-                    <Bar dataKey="hours" fill="#3563e9" radius={[5, 5, 0, 0]} />
+                    <Tooltip formatter={(value: number, name: string) => [`${value.toFixed(1)} h`, name === 'planned' ? 'Planifié' : 'Réalisé']} />
+                    <Bar dataKey="planned" fill="#94a3b8" radius={[5, 5, 0, 0]} />
+                    <Bar dataKey="actual" fill="#3563e9" radius={[5, 5, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </section>
@@ -217,7 +214,7 @@ export default function DashboardPage() {
                 <h2 className="font-semibold text-bodyText">Dernières feuilles de temps</h2>
                 <Link href="/timesheets" className="text-sm font-medium text-accent hover:underline">Voir toutes les feuilles</Link>
               </div>
-              <DataTable columns={timesheetColumns} data={data.latestTimesheets} pageSize={8} />
+              <DataTable columns={timesheetColumns} data={data.latestTimesheets} pageSize={8} getRowHref={(timesheet) => `/timesheets/${timesheet.id}`} />
             </section>
           </>
         )}

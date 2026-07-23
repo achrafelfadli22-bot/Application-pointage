@@ -19,6 +19,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# Recrée les liens pnpm des importers du workspace après la copie des sources.
+RUN pnpm install --frozen-lockfile --force
+
 RUN pnpm db:generate
 RUN pnpm --filter @pointage360/api run build
 

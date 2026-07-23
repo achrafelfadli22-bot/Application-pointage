@@ -81,7 +81,6 @@ export class ExportsProcessor extends WorkerHost {
         check_out: r.checkOutAt?.toISOString() ?? '',
         duration_minutes: r.durationMinutes ?? '',
         location: r.workLocation,
-        gps_anomaly: r.isGpsAnomaly ? 'true' : 'false',
         status: r.status,
       }));
     }

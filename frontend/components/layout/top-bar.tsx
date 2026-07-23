@@ -9,6 +9,7 @@ import { ROLE_LABELS } from '@/lib/nav-items';
 const breadcrumbs: Record<string, string[]> = {
   '/dashboard':            ['Tableau de bord'],
   '/timesheets':           ['Feuilles de temps'],
+  '/planning':             ['Planification'],
   '/team':                 ['Mon équipe'],
   '/projects':             ['Projets'],
   '/sites':                ['Sites'],
@@ -17,7 +18,6 @@ const breadcrumbs: Record<string, string[]> = {
   '/time-off/requests':    ['Congés', 'Demandes'],
   '/reports':              ['Rapports'],
   '/settings':             ['Paramètres'],
-  '/planning':             ['Planning équipe'],
   '/admin/tenants':        ['Administration', 'Sociétés'],
   '/admin/subscriptions':  ['Administration', 'Abonnements'],
   '/audit-log':            ["Journal d'audit"],
@@ -101,6 +101,9 @@ function getBreadcrumbs(pathname: string, detailLabel?: string | null): string[]
   const parts = pathname.split('/').filter(Boolean);
   if (parts.length === 2 && parts[0] === 'timesheets') {
     return ['Feuilles de temps', detailLabel || 'Detail feuille de temps'];
+  }
+  if (parts.length === 2 && parts[0] === 'planning') {
+    return ['Planification', detailLabel || 'Détail de la planification'];
   }
   if (parts.length === 2 && parts[0] === 'team') {
     return ['Mon equipe', detailLabel || 'Fiche employe'];

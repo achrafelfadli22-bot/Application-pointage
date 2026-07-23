@@ -20,7 +20,7 @@ export class ReportsController {
   @ApiOperation({
     summary: 'Synthèse mensuelle de présence par employé',
     description:
-      'Agrège les pointages par employé : jours travaillés, heures totales, retards, anomalies GPS, taux de présence. Seuil de retard depuis TenantSettings.',
+      'Agrège les pointages par employé : jours travaillés, heures totales, retards et taux de présence.',
   })
   monthlyAttendance(@CurrentUser() user: CurrentUserContext, @Query() filters: ReportFilterDto) {
     return this.service.monthlyAttendance(user, filters);
@@ -30,7 +30,7 @@ export class ReportsController {
   @ApiOperation({
     summary: 'Charge par site / projet',
     description:
-      'Heures timesheets approuvées par site : heures facturables vs internes, headcount, taux de facturation, anomalies GPS.',
+      'Heures timesheets approuvées par site : heures facturables vs internes, headcount et taux de facturation.',
   })
   siteWorkload(@CurrentUser() user: CurrentUserContext, @Query() filters: ReportFilterDto) {
     return this.service.siteWorkload(user, filters);
@@ -54,16 +54,6 @@ export class ReportsController {
   })
   payrollExport(@CurrentUser() user: CurrentUserContext, @Query() filters: ReportFilterDto) {
     return this.service.payrollExport(user, filters);
-  }
-
-  @Get('late-gps-anomalies')
-  @ApiOperation({
-    summary: 'Retards & anomalies GPS',
-    description:
-      'Retards par employé (seuil TenantSettings), anomalies GPS par site, pointages ouverts sans check-out.',
-  })
-  lateAndGpsAnomalies(@CurrentUser() user: CurrentUserContext, @Query() filters: ReportFilterDto) {
-    return this.service.lateAndGpsAnomalies(user, filters);
   }
 
   @Get('hr-dashboard')
@@ -116,9 +106,4 @@ export class ReportsController {
     return this.service.leave(user, filters);
   }
 
-  @Get('gps-anomalies')
-  @ApiOperation({ summary: 'Liste brute des pointages avec anomalie GPS (paginée, max 500)' })
-  gpsAnomalies(@CurrentUser() user: CurrentUserContext, @Query() filters: ReportFilterDto) {
-    return this.service.gpsAnomalies(user, filters);
-  }
 }

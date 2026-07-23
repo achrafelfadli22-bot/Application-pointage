@@ -4,14 +4,7 @@ export type TimesheetTaskType = {
   isActive: boolean;
 };
 
-export const DEFAULT_TIMESHEET_TASK_TYPES: TimesheetTaskType[] = [
-  { value: 'EXECUTION', label: 'Execution travaux', isActive: true },
-  { value: 'PREPARATION', label: 'Preparation', isActive: true },
-  { value: 'REUNION_SITE', label: 'Reunion site', isActive: true },
-  { value: 'CONTROLE_QUALITE', label: 'Controle qualite', isActive: true },
-  { value: 'ADMINISTRATIF', label: 'Administratif', isActive: true },
-  { value: 'AUTRE', label: 'Autre', isActive: true },
-];
+export const DEFAULT_TIMESHEET_TASK_TYPES: TimesheetTaskType[] = [];
 
 export function normalizeTaskTypeValue(value: string) {
   return value

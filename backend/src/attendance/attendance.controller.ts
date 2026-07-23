@@ -34,13 +34,11 @@ export class AttendanceController {
     @Query('siteId') siteId?: string,
     @Query('userId') userId?: string,
     @Query('status') status?: AttendanceStatus,
-    @Query('gpsAnomaly') gpsAnomaly?: string,
   ) {
     return this.service.findAll(user, {
       siteId,
       userId,
       status,
-      gpsAnomaly: gpsAnomaly === undefined ? undefined : gpsAnomaly === 'true',
     });
   }
 

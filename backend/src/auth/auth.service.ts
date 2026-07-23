@@ -12,6 +12,8 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 
 type TokenPair = {
   accessToken: string;
@@ -138,6 +140,70 @@ export class AuthService {
   }
 
   // ─── Mot de passe oublié ──────────────────────────────────────────────────
+
+  async updateProfile(userId: string, dto: UpdateProfileDto) {
+    const user = await this.prisma.user.findFirstOrThrow({
+      where: { id: userId, deletedAt: null, status: UserStatus.ACTIVE },
+    });
+
+    const updated = await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        firstName: dto.firstName.trim(),
+        lastName: dto.lastName.trim(),
+        phone: dto.phone?.trim() || null,
+      },
+    });
+
+    await this.auditLog.log({
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'auth.profile_updated',
+      entityType: 'User',
+      entityId: user.id,
+    });
+
+    return { user: this.toProfile(updated) };
+  }
+
+  async changePassword(userId: string, dto: ChangePasswordDto) {
+    assertStrongPassword(dto.newPassword, this.config);
+
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null, status: UserStatus.ACTIVE },
+    });
+    if (!user) {
+      throw new UnauthorizedException('Utilisateur introuvable ou inactif.');
+    }
+
+    const currentPasswordMatches = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+    if (!currentPasswordMatches) {
+      throw new BadRequestException('Le mot de passe actuel est incorrect.');
+    }
+    if (await bcrypt.compare(dto.newPassword, user.passwordHash)) {
+      throw new BadRequestException("Le nouveau mot de passe doit être différent de l'ancien.");
+    }
+
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash: await bcrypt.hash(dto.newPassword, 12),
+        refreshTokenHash: null,
+        passwordResetToken: null,
+        passwordResetExpiry: null,
+      },
+    });
+
+    await this.auditLog.log({
+      tenantId: user.tenantId,
+      userId: user.id,
+      action: 'auth.password_changed',
+      entityType: 'User',
+      entityId: user.id,
+    });
+
+    return { message: 'Mot de passe modifié avec succès.' };
+  }
 
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.prisma.user.findUnique({

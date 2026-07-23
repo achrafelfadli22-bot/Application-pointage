@@ -18,6 +18,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 
+# Recrée les liens pnpm des importers du workspace après la copie des sources.
+RUN pnpm install --frozen-lockfile --force
+
 ARG NEXT_PUBLIC_API_URL=/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 

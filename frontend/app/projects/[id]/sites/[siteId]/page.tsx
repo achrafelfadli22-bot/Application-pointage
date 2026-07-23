@@ -5,11 +5,9 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ColumnDef } from '@tanstack/react-table';
 import * as Dialog from '@radix-ui/react-dialog';
-import { ArrowLeft, MapPin, Pencil, Trash2, UserPlus, X } from 'lucide-react';
+import { ArrowLeft, Pencil, Trash2, UserPlus, X } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
-import { ProgressMeter } from '@/components/domain/progress-meter';
-import { SiteMap } from '@/components/domain/site-map';
 import { AccentCard, SummaryCounters } from '@/components/ui/cards';
 import { DangerButton, PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
@@ -18,7 +16,6 @@ import { DateField, FormField, SelectField } from '@/components/ui/form-fields';
 import { StatusBadge } from '@/components/ui/status-badge';
 import { api, tokenStore } from '@/lib/api-client';
 import { ROLE_LABELS } from '@/lib/nav-items';
-import { demoSites } from '@/lib/demo-data';
 import { useApiData } from '@/lib/use-api-data';
 
 type Assignment = {
@@ -58,7 +55,6 @@ type AttendancePunch = {
   checkInAt?: string;
   checkOutAt?: string;
   durationMinutes?: number;
-  isGpsAnomaly: boolean;
   status: string;
   user: { firstName: string; lastName: string };
 };
@@ -67,17 +63,7 @@ type Site = {
   id: string;
   code: string;
   name: string;
-  clientName: string;
   address?: string;
-  city?: string;
-  country?: string;
-  status: string;
-  progressPercent: number;
-  latitude?: number;
-  longitude?: number;
-  gpsRadiusMeters: number;
-  startDate?: string;
-  plannedEndDate?: string;
   project?: Project | null;
   manager?: { id: string; firstName: string; lastName: string; email: string } | null;
   assignments: Assignment[];
@@ -89,14 +75,6 @@ const fallbackSite: Site = {
   id: 'demo',
   code: 'MPH',
   name: 'MPH',
-  clientName: 'Futura Expertise',
-  city: 'Casablanca',
-  country: 'MA',
-  status: 'ACTIVE',
-  progressPercent: 42,
-  gpsRadiusMeters: 250,
-  latitude: 33.5731,
-  longitude: -7.5898,
   assignments: [],
   attendancePunches: [],
 };
@@ -114,53 +92,26 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function dateInput(value?: string | null) {
-  return value ? value.slice(0, 10) : '';
-}
-
-function optionalNumberInput(value?: number | string | null) {
-  return value == null ? '' : String(value);
-}
-
-const DEFAULT_SITE_ROLE_OPTIONS = [
-  'Chef de site',
-  'Chef d equipe',
-  'Technicien',
-  'Electricien',
-  'Aide electricien',
-  'Controle qualite',
-  'HSE',
-  'Administratif site',
-];
+const DEFAULT_SITE_ROLE_OPTIONS: string[] = [];
 
 function EditSiteModal({
   site,
-  projectId,
-  clientName,
   employees,
+  editorRole,
   onUpdated,
 }: {
   site: Site;
-  projectId: string;
-  clientName: string;
   employees: Employee[];
+  editorRole: string;
   onUpdated: () => void;
 }) {
+  const isHR = editorRole === 'HR';
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     code: site.code,
     name: site.name,
     address: site.address ?? '',
-    city: site.city ?? '',
-    country: site.country ?? 'MA',
     managerId: site.manager?.id ?? '',
-    startDate: dateInput(site.startDate),
-    plannedEndDate: dateInput(site.plannedEndDate),
-    status: site.status,
-    progressPercent: site.progressPercent ?? 0,
-    latitude: optionalNumberInput(site.latitude),
-    longitude: optionalNumberInput(site.longitude),
-    gpsRadiusMeters: site.gpsRadiusMeters ?? 150,
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,16 +122,7 @@ function EditSiteModal({
       code: site.code,
       name: site.name,
       address: site.address ?? '',
-      city: site.city ?? '',
-      country: site.country ?? 'MA',
       managerId: site.manager?.id ?? '',
-      startDate: dateInput(site.startDate),
-      plannedEndDate: dateInput(site.plannedEndDate),
-      status: site.status,
-      progressPercent: site.progressPercent ?? 0,
-      latitude: optionalNumberInput(site.latitude),
-      longitude: optionalNumberInput(site.longitude),
-      gpsRadiusMeters: site.gpsRadiusMeters ?? 150,
     });
     setError(null);
   }, [open, site]);
@@ -188,40 +130,23 @@ function EditSiteModal({
   const managerOptions = employees
     .filter((employee) => employee.status === 'ACTIVE')
     .filter((employee) => employee.user.status !== 'INACTIVE')
-    .filter((employee) => employee.user.role === 'MANAGER')
     .sort((a, b) =>
       `${a.user.firstName} ${a.user.lastName}`.localeCompare(`${b.user.firstName} ${b.user.lastName}`),
     );
   async function handleSubmit() {
-    if (!form.code || !form.name) {
-      setError('Code et nom sont obligatoires.');
+    if (isHR && (!form.code || !form.name || !form.managerId)) {
+      setError('Le code, le nom et le chef de site sont obligatoires.');
       return;
     }
-    if (!clientName.trim()) {
-      setError("Le client doit d'abord etre defini dans le projet.");
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
     try {
       const payload: Record<string, unknown> = {
-        projectId,
+        managerId: form.managerId,
         code: form.code,
         name: form.name,
-        clientName,
         address: form.address || undefined,
-        city: form.city || undefined,
-        country: form.country || undefined,
-        managerId: form.managerId || undefined,
-        startDate: form.startDate || undefined,
-        plannedEndDate: form.plannedEndDate || undefined,
-        status: form.status,
-        progressPercent: Number(form.progressPercent),
-        gpsRadiusMeters: Number(form.gpsRadiusMeters),
       };
-      if (form.latitude) payload.latitude = Number(form.latitude);
-      if (form.longitude) payload.longitude = Number(form.longitude);
 
       await api.updateSite(site.id, payload);
       setOpen(false);
@@ -253,46 +178,21 @@ function EditSiteModal({
 
           <div className="grid gap-4 p-5">
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Code site" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
-              <FormField label="Nom du site" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-              <SelectField label="Chef de site" value={form.managerId} onChange={(e) => setForm((p) => ({ ...p, managerId: e.target.value }))}>
-                <option value="">Selectionner</option>
-                {managerOptions.map((employee) => (
-                  <option key={employee.user.id} value={employee.user.id}>
-                    {employee.user.firstName} {employee.user.lastName}
-                  </option>
-                ))}
-              </SelectField>
-              <SelectField label="Statut" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
-                <option value="ACTIVE">Actif</option>
-                <option value="SUSPENDED">Suspendu</option>
-                <option value="COMPLETED">Termine</option>
-              </SelectField>
-              <FormField label="Adresse" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
-              <FormField label="Ville" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
-              <FormField label="Pays (ISO)" value={form.country} onChange={(e) => setForm((p) => ({ ...p, country: e.target.value }))} />
-              <DateField label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
-              <DateField label="Fin prévue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
-              <FormField
-                label="Avancement (%)"
-                type="number"
-                min={0}
-                max={100}
-                value={form.progressPercent}
-                onChange={(e) => setForm((p) => ({ ...p, progressPercent: Number(e.target.value) }))}
-              />
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-3">
-              <FormField label="Latitude" value={form.latitude} onChange={(e) => setForm((p) => ({ ...p, latitude: e.target.value }))} />
-              <FormField label="Longitude" value={form.longitude} onChange={(e) => setForm((p) => ({ ...p, longitude: e.target.value }))} />
-              <FormField
-                label="Rayon GPS (m)"
-                type="number"
-                min={1}
-                value={form.gpsRadiusMeters}
-                onChange={(e) => setForm((p) => ({ ...p, gpsRadiusMeters: Number(e.target.value) }))}
-              />
+               <FormField disabled={!isHR} label="Code site" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
+               <FormField disabled={!isHR} label="Nom du site" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+               {isHR ? (
+                 <SelectField label="Chef de site" value={form.managerId} onChange={(e) => setForm((p) => ({ ...p, managerId: e.target.value }))}>
+                   <option value="">Sélectionner</option>
+                   {managerOptions.map((employee) => (
+                     <option key={employee.user.id} value={employee.user.id}>
+                       {employee.user.firstName} {employee.user.lastName}
+                     </option>
+                   ))}
+                 </SelectField>
+               ) : (
+                 <FormField disabled label="Chef de site" value={site.manager ? `${site.manager.firstName} ${site.manager.lastName}` : 'Non affecté'} />
+               )}
+               <FormField disabled={!isHR} label="Adresse" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
             </div>
 
             {error && <p className="text-sm text-dangerText">{error}</p>}
@@ -506,25 +406,23 @@ export default function SiteDetailPage() {
   const router = useRouter();
   const projectId = params?.id ?? '';
   const siteId = params?.siteId ?? '';
-  const fallback = (demoSites.find((s) => s.id === siteId) as Site | undefined) ?? fallbackSite;
   const [actionError, setActionError] = useState<string | null>(null);
 
   const { data: site, refresh } = useApiData<Site>(
     () => api.site(siteId) as Promise<Site>,
-    { ...fallback, assignments: [], attendancePunches: [] },
+    { ...fallbackSite, id: siteId, assignments: [], attendancePunches: [] },
+    { fallbackMode: 'never' },
   );
   const { data: project } = useApiData<Project>(
     () => api.project(projectId) as Promise<Project>,
     { id: projectId, code: '', name: 'Projet', clientName: null },
   );
   const myRole = tokenStore.session?.role ?? '';
-  const currentUserId = tokenStore.session?.user.id;
-  const canEditSite = myRole === 'RESOURCE_MANAGER' || myRole === 'HR';
+  const canEditSite = myRole === 'HR';
   const canManageAssignments = myRole === 'RESOURCE_MANAGER';
-  const canAssign =
-    ['RESOURCE_MANAGER', 'HR'].includes(myRole) || (myRole === 'MANAGER' && site.manager?.id === currentUserId);
+  const canAssign = myRole === 'RESOURCE_MANAGER';
   const { data: employees } = useApiData<Employee[]>(
-    () => (canManageAssignments ? (api.employees() as Promise<Employee[]>) : Promise.resolve([])),
+    () => (canManageAssignments || myRole === 'HR' ? (api.employees() as Promise<Employee[]>) : Promise.resolve([])),
     [],
   );
   const { data: siteOptions } = useApiData<SiteOptions>(
@@ -600,20 +498,11 @@ export default function SiteDetailPage() {
           : '—',
     },
     {
-      header: 'GPS',
-      cell: ({ row }) => (
-        <span className={row.original.isGpsAnomaly ? 'font-semibold text-dangerText' : 'text-green-600'}>
-          {row.original.isGpsAnomaly ? 'Anomalie' : 'OK'}
-        </span>
-      ),
-    },
-    {
       header: 'Statut',
       cell: ({ row }) => <StatusBadge status={row.original.status} />,
     },
   ];
 
-  const gpsAnomalies = site.attendancePunches.filter((p) => p.isGpsAnomaly).length;
   const activeAssignments = site.assignments.filter((a) => !a.endDate || new Date(a.endDate) >= new Date()).length;
 
   async function handleDeleteSite() {
@@ -646,13 +535,12 @@ export default function SiteDetailPage() {
                   {canEditSite && (
                     <EditSiteModal
                       site={site}
-                      projectId={projectId}
-                      clientName={project.clientName ?? ''}
                       employees={employees}
+                      editorRole={myRole}
                       onUpdated={refresh}
                     />
                   )}
-                  {canEditSite && (
+                  {myRole === 'HR' && (
                     <ConfirmDialog
                       title="Supprimer le site"
                       description={`Supprimer le site ${site.name} ? Il sera suspendu et masque des listes actives.`}
@@ -689,11 +577,8 @@ export default function SiteDetailPage() {
 
         <SummaryCounters
           items={[
-            { label: 'Statut', value: site.status, active: true },
-            { label: 'Avancement', value: `${site.progressPercent ?? 0}%` },
             { label: 'Employés affectés', value: site.assignments.length },
             { label: 'Affectations actives', value: activeAssignments },
-            { label: 'Anomalies GPS', value: gpsAnomalies },
             { label: 'Pointages récents', value: site.attendancePunches.length },
           ]}
         />
@@ -701,17 +586,12 @@ export default function SiteDetailPage() {
         {/* Informations principales */}
         <AccentCard>
           <h2 className="mb-4 text-base font-bold text-bodyText">Informations du site</h2>
-          <div className="mb-5 max-w-xl">
-            <div className="mb-2 text-xs font-semibold uppercase text-mutedText">Avancement du projet</div>
-            <ProgressMeter value={site.progressPercent} className="max-w-md" />
-          </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <InfoRow label="Nom du site" value={site.name} />
             <InfoRow label="Code" value={<span className="font-mono text-accent">{site.code}</span>} />
-            <InfoRow label="Ville" value={site.city} />
-            <InfoRow label="Pays" value={site.country} />
             <InfoRow label="Adresse" value={site.address} />
             <InfoRow
-              label="Manager"
+              label="Chef de site"
               value={
                 site.manager ? (
                   <span>
@@ -722,67 +602,7 @@ export default function SiteDetailPage() {
                 )
               }
             />
-            <InfoRow
-              label="Date début"
-              value={site.startDate ? new Date(site.startDate).toLocaleDateString('fr-FR') : '—'}
-            />
-            <InfoRow
-              label="Fin prévue"
-              value={site.plannedEndDate ? new Date(site.plannedEndDate).toLocaleDateString('fr-FR') : '—'}
-            />
           </div>
-          <div className="mt-4">
-            <StatusBadge status={site.status} />
-          </div>
-        </AccentCard>
-
-        {/* Géolocalisation GPS */}
-        <AccentCard>
-          <h2 className="mb-4 flex items-center gap-2 text-base font-bold text-bodyText">
-            <MapPin className="h-4 w-4 text-accent" />
-            Géolocalisation GPS
-          </h2>
-          <div className="mb-4 grid gap-4 sm:grid-cols-3">
-            <InfoRow
-              label="Latitude"
-              value={site.latitude != null ? Number(site.latitude).toFixed(6) : '—'}
-            />
-            <InfoRow
-              label="Longitude"
-              value={site.longitude != null ? Number(site.longitude).toFixed(6) : '—'}
-            />
-            <InfoRow label="Rayon de tolérance" value={`${site.gpsRadiusMeters} m`} />
-          </div>
-
-          {/* Légende */}
-          <div className="mb-3 flex flex-wrap gap-4 text-xs text-mutedText">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-full bg-green-500" />
-              Pointage dans le périmètre
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-full bg-red-500" />
-              Anomalie GPS
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-3 w-3 rounded-full border-2 border-blue-500 bg-blue-100" />
-              Zone autorisée ({site.gpsRadiusMeters} m)
-            </span>
-          </div>
-
-          {site.latitude != null && site.longitude != null ? (
-            <SiteMap
-              latitude={Number(site.latitude)}
-              longitude={Number(site.longitude)}
-              gpsRadiusMeters={site.gpsRadiusMeters}
-              siteName={site.name}
-              punches={site.attendancePunches as Parameters<typeof SiteMap>[0]['punches']}
-            />
-          ) : (
-            <div className="flex h-32 items-center justify-center rounded-lg border border-dashed border-borderSoft text-sm text-mutedText">
-              Coordonnées GPS non renseignées pour ce site.
-            </div>
-          )}
         </AccentCard>
 
         {/* Employés affectés */}
@@ -793,7 +613,11 @@ export default function SiteDetailPage() {
           {site.assignments.length === 0 ? (
             <p className="text-sm text-mutedText">Aucune affectation enregistrée.</p>
           ) : (
-            <DataTable columns={assignmentColumns} data={site.assignments} />
+            <DataTable
+              columns={assignmentColumns}
+              data={site.assignments}
+              getRowHref={(assignment) => assignment.user.employeeProfile?.id ? `/team/${assignment.user.employeeProfile.id}` : undefined}
+            />
           )}
         </section>
 

@@ -13,7 +13,7 @@ export class AuditLogController {
   constructor(private readonly service: AuditLogService) {}
 
   @Get()
-  @Roles(UserRole.SUPER_ADMIN, UserRole.RESOURCE_MANAGER, UserRole.HR)
+  @Roles(UserRole.HR)
   findAll(
     @CurrentUser() user: CurrentUserContext,
     @Query('take') take?: string,

@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { LeaveRequestStatus, Prisma, SiteStatus, TimesheetStatus, UserRole } from '@prisma/client';
+import { LeaveRequestStatus, Prisma, TimesheetStatus, UserRole } from '@prisma/client';
 import { HierarchyService } from '../common/hierarchy.service';
 import { CurrentUserContext } from '../common/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -21,14 +21,30 @@ export class DashboardService {
     const today = this.dateOnly(new Date());
     const weekStart = new Date(today);
     weekStart.setUTCDate(today.getUTCDate() - ((today.getUTCDay() + 6) % 7));
-    const chartStart = new Date(today);
-    chartStart.setUTCDate(today.getUTCDate() - 6);
+    const chartStart = new Date(weekStart);
+    const weekEnd = new Date(weekStart);
+    weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
 
-    const timesheetWhere: Prisma.TimesheetWhereInput = { ...tenantWhere, ...userScope };
+    const timesheetWhere: Prisma.TimesheetWhereInput = {
+      ...tenantWhere,
+      ...userScope,
+      OR: [
+        { userId: user.userId },
+        { status: { not: TimesheetStatus.DRAFT } },
+      ],
+    };
     const entryWhere: Prisma.TimesheetDayEntryWhereInput = {
       ...tenantWhere,
-      entryDate: { gte: weekStart, lte: today },
-      timesheetLine: { timesheet: userScope },
+      entryDate: { gte: weekStart, lte: weekEnd },
+      timesheetLine: {
+        timesheet: {
+          ...userScope,
+          OR: [
+            { userId: user.userId },
+            { status: { not: TimesheetStatus.DRAFT } },
+          ],
+        },
+      },
     };
 
     const [
@@ -40,6 +56,8 @@ export class DashboardService {
       latestTimesheets,
       chartEntries,
       pendingLeaveRequests,
+      weeklyPlannedHours,
+      chartPlannedEntries,
     ] = await Promise.all([
       this.prisma.employeeProfile.count({ where: { ...tenantWhere, ...employeeScope, status: 'ACTIVE' } }),
       this.prisma.timesheetDayEntry.aggregate({ where: entryWhere, _sum: { hours: true } }),
@@ -55,7 +73,7 @@ export class DashboardService {
           status: { in: [LeaveRequestStatus.SUBMITTED, LeaveRequestStatus.N1_APPROVED] },
         },
       }),
-      this.prisma.site.count({ where: { ...siteWhere, status: SiteStatus.ACTIVE, deletedAt: null } }),
+      this.prisma.site.count({ where: { ...siteWhere, deletedAt: null } }),
       this.prisma.timesheet.findMany({
         where: timesheetWhere,
         include: {
@@ -73,7 +91,7 @@ export class DashboardService {
       this.prisma.timesheetDayEntry.findMany({
         where: {
           ...tenantWhere,
-          entryDate: { gte: chartStart, lte: today },
+          entryDate: { gte: chartStart, lte: weekEnd },
           timesheetLine: { timesheet: userScope },
         },
         select: { entryDate: true, hours: true },
@@ -88,6 +106,30 @@ export class DashboardService {
         orderBy: { createdAt: 'desc' },
         take: 5,
       }),
+      this.prisma.planningDayEntry.aggregate({
+        where: {
+          ...tenantWhere,
+          entryDate: { gte: weekStart, lte: weekEnd },
+          planningLine: {
+            ...(managedUserIds ? { userId: { in: managedUserIds } } : {}),
+            site: siteWhere,
+            planning: { status: 'PUBLISHED' },
+          },
+        },
+        _sum: { hours: true },
+      }),
+      this.prisma.planningDayEntry.findMany({
+        where: {
+          ...tenantWhere,
+          entryDate: { gte: chartStart, lte: weekEnd },
+          planningLine: {
+            ...(managedUserIds ? { userId: { in: managedUserIds } } : {}),
+            site: siteWhere,
+            planning: { status: 'PUBLISHED' },
+          },
+        },
+        select: { entryDate: true, hours: true },
+      }),
     ]);
 
     const statusCount = Object.fromEntries(statusGroups.map((group) => [group.status, group._count._all]));
@@ -96,6 +138,11 @@ export class DashboardService {
       const key = entry.entryDate.toISOString().slice(0, 10);
       hoursByDate.set(key, (hoursByDate.get(key) ?? 0) + Number(entry.hours));
     }
+    const plannedByDate = new Map<string, number>();
+    for (const entry of chartPlannedEntries) {
+      const key = entry.entryDate.toISOString().slice(0, 10);
+      plannedByDate.set(key, (plannedByDate.get(key) ?? 0) + Number(entry.hours));
+    }
 
     const hoursByDay = Array.from({ length: 7 }, (_, index) => {
       const date = new Date(chartStart);
@@ -103,11 +150,20 @@ export class DashboardService {
       const key = date.toISOString().slice(0, 10);
       return { date: key, hours: Number((hoursByDate.get(key) ?? 0).toFixed(2)) };
     });
+    const plannedVsActualByDay = hoursByDay.map((item) => ({
+      date: item.date,
+      planned: Number((plannedByDate.get(item.date) ?? 0).toFixed(2)),
+      actual: item.hours,
+    }));
+    const plannedWeeklyHours = Number(weeklyPlannedHours._sum.hours ?? 0);
+    const actualWeeklyHours = Number(weeklyHours._sum.hours ?? 0);
 
     return {
       counters: {
         activeEmployees,
-        weeklyHours: Number(weeklyHours._sum.hours ?? 0),
+        weeklyHours: actualWeeklyHours,
+        plannedWeeklyHours,
+        weeklyVariance: Number((actualWeeklyHours - plannedWeeklyHours).toFixed(2)),
         pendingTimesheets:
           (statusCount[TimesheetStatus.SUBMITTED] ?? 0) + (statusCount[TimesheetStatus.N1_APPROVED] ?? 0),
         approvedTimesheets: statusCount[TimesheetStatus.APPROVED] ?? 0,
@@ -122,6 +178,7 @@ export class DashboardService {
         count: statusCount[status] ?? 0,
       })),
       hoursByDay,
+      plannedVsActualByDay,
       latestTimesheets: latestTimesheets.map((timesheet) => ({
         id: timesheet.id,
         periodStart: timesheet.periodStart,

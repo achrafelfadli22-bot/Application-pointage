@@ -93,8 +93,6 @@ export function buildAttendanceSheet(data: any[]): ExcelSheet[] {
     sortie:   fmtTime(p.checkOutAt),
     duree:    fmtHours(p.durationMinutes),
     statut:   statusLabel(p.status ?? ''),
-    latitude: p.latitude ?? '',
-    longitude: p.longitude ?? '',
   }));
 
   return [{
@@ -109,8 +107,6 @@ export function buildAttendanceSheet(data: any[]): ExcelSheet[] {
       { header: 'Sortie',           key: 'sortie',     width: 10 },
       { header: 'Durée (h)',        key: 'duree',      width: 12, type: 'number' },
       { header: 'Statut',           key: 'statut',     width: 14 },
-      { header: 'Latitude',         key: 'latitude',   width: 14 },
-      { header: 'Longitude',        key: 'longitude',  width: 14 },
     ],
     rows,
     totals: {
@@ -120,43 +116,6 @@ export function buildAttendanceSheet(data: any[]): ExcelSheet[] {
   }];
 }
 
-// ─── Anomalies GPS ────────────────────────────────────────────────────────────
-
-export function buildGpsAnomaliesSheet(data: any[]): ExcelSheet[] {
-  const rows = data.map((p) => ({
-    employe:   `${p.user?.firstName ?? ''} ${p.user?.lastName ?? ''}`.trim(),
-    email:     p.user?.email ?? '',
-    date:      fmtDate(p.punchDate),
-    heure:     fmtTime(p.checkInAt),
-    site:  p.site?.name ?? '—',
-    code:      p.site?.code ?? '',
-    rayon:     p.site?.gpsRadiusMeters ?? '',
-    latPointage:  p.latitude ?? '',
-    lngPointage:  p.longitude ?? '',
-    latSite:  p.site?.latitude ?? '',
-    lngSite:  p.site?.longitude ?? '',
-    statut:    statusLabel(p.status ?? ''),
-  }));
-
-  return [{
-    name: 'Anomalies GPS',
-    columns: [
-      { header: 'Employé',           key: 'employe',      width: 22 },
-      { header: 'Email',             key: 'email',        width: 28 },
-      { header: 'Date',              key: 'date',         width: 14 },
-      { header: 'Heure',             key: 'heure',        width: 10 },
-      { header: 'Site',          key: 'site',     width: 24 },
-      { header: 'Code',              key: 'code',         width: 12 },
-      { header: 'Rayon autorisé (m)',key: 'rayon',        width: 18, type: 'number' },
-      { header: 'Lat. pointage',     key: 'latPointage',  width: 16 },
-      { header: 'Lng. pointage',     key: 'lngPointage',  width: 16 },
-      { header: 'Lat. site',     key: 'latSite',  width: 16 },
-      { header: 'Lng. site',     key: 'lngSite',  width: 16 },
-      { header: 'Statut',            key: 'statut',       width: 14 },
-    ],
-    rows,
-  }];
-}
 
 // ─── Heures par site ──────────────────────────────────────────────────────
 

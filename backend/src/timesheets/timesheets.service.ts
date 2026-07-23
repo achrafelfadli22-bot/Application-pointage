@@ -177,6 +177,7 @@ export class TimesheetsService {
       id: string;
       tenantId: string;
       userId: string;
+      user?: { role: UserRole };
       status: TimesheetStatus;
       lines: Array<{ siteId: string | null }>;
     },
@@ -203,9 +204,14 @@ export class TimesheetsService {
       if (timesheet.userId === user.userId) return false;
       const detailed = await this.repository.findFirstOrThrow({
         where: { id: timesheet.id },
-        include: { lines: { include: { site: { include: { project: true } } } } },
+        include: {
+          user: { select: { role: true } },
+          lines: { include: { site: { include: { project: true } } } },
+        },
       });
-      return detailed.lines.some((line) => this.lineApprovalPermissions(user, timesheet.userId, line).canEdit);
+      return detailed.lines.some(
+        (line) => this.lineApprovalPermissions(user, timesheet.userId, line).canEdit,
+      );
     }
 
     return false;
@@ -263,21 +269,24 @@ export class TimesheetsService {
       throw new ForbiddenException("Aucune ligne de votre perimetre n'est prete a etre validee.");
     }
 
+    const isSiteStage = permissions.approvalStage === 'SITE';
     const scopedLines = timesheet.lines.filter((line) =>
-      user.role === UserRole.MANAGER
+      isSiteStage
         ? line.site?.managerId === user.userId &&
+          line.site.managerId !== timesheet.userId &&
           line.approvalStatus === TimesheetLineStatus.SUBMITTED
         : line.site?.project?.projectManagerId === user.userId &&
-          line.approvalStatus === TimesheetLineStatus.SITE_APPROVED,
+          (line.site.managerId === timesheet.userId
+            ? line.approvalStatus === TimesheetLineStatus.SUBMITTED
+            : line.approvalStatus === TimesheetLineStatus.SITE_APPROVED),
     );
-    const nextStatus =
-      user.role === UserRole.MANAGER ? TimesheetLineStatus.SITE_APPROVED : TimesheetLineStatus.APPROVED;
+    const nextStatus = isSiteStage ? TimesheetLineStatus.SITE_APPROVED : TimesheetLineStatus.APPROVED;
 
     for (const line of scopedLines) {
       await this.repository.updateLine({
         where: { id: line.id },
         data:
-          user.role === UserRole.MANAGER
+          isSiteStage
             ? {
                 approvalStatus: nextStatus,
                 siteApprovedById: user.userId,
@@ -304,12 +313,12 @@ export class TimesheetsService {
       throw new ForbiddenException('Vous ne pouvez pas valider cette ligne ou elle ne correspond pas a votre perimetre.');
     }
 
-    const nextStatus =
-      user.role === UserRole.MANAGER ? TimesheetLineStatus.SITE_APPROVED : TimesheetLineStatus.APPROVED;
+    const isSiteStage = permissions.stage === 'SITE';
+    const nextStatus = isSiteStage ? TimesheetLineStatus.SITE_APPROVED : TimesheetLineStatus.APPROVED;
     await this.repository.updateLine({
       where: { id: lineId },
       data:
-        user.role === UserRole.MANAGER
+        isSiteStage
           ? { approvalStatus: nextStatus, siteApprovedById: user.userId, siteApprovedAt: new Date() }
           : { approvalStatus: nextStatus, projectApprovedById: user.userId, projectApprovedAt: new Date() },
     });
@@ -571,20 +580,25 @@ export class TimesheetsService {
       return { canEdit: false, canApprove: false, canReject: false, stage: null };
     }
 
-    const isSiteManager = user.role === UserRole.MANAGER && line.site.managerId === user.userId;
-    const isProjectManager =
-      user.role === UserRole.PROJECT_MANAGER && line.site.project.projectManagerId === user.userId;
-    const canSiteDecide = isSiteManager && line.approvalStatus === TimesheetLineStatus.SUBMITTED;
-    const canProjectDecide = isProjectManager && line.approvalStatus === TimesheetLineStatus.SITE_APPROVED;
+    const isSiteManager = line.site.managerId === user.userId;
+    const isProjectManager = line.site.project.projectManagerId === user.userId;
+    const ownerIsSiteManager = line.site.managerId === ownerId;
+    const canSiteDecide =
+      isSiteManager && !ownerIsSiteManager && line.approvalStatus === TimesheetLineStatus.SUBMITTED;
+    const canProjectDecide =
+      isProjectManager &&
+      (ownerIsSiteManager
+        ? line.approvalStatus === TimesheetLineStatus.SUBMITTED
+        : line.approvalStatus === TimesheetLineStatus.SITE_APPROVED);
 
     return {
       canEdit:
         (isSiteManager &&
           (line.approvalStatus === TimesheetLineStatus.SUBMITTED ||
             line.approvalStatus === TimesheetLineStatus.REJECTED)) ||
-        (isProjectManager && line.approvalStatus === TimesheetLineStatus.SITE_APPROVED),
+        (isProjectManager && ownerIsSiteManager && line.approvalStatus === TimesheetLineStatus.SUBMITTED),
       canApprove: canSiteDecide || canProjectDecide,
-      canReject: canSiteDecide || canProjectDecide,
+      canReject: canProjectDecide && !ownerIsSiteManager,
       stage: canSiteDecide ? 'SITE' : canProjectDecide ? 'PROJECT' : null,
     };
   }
@@ -604,41 +618,54 @@ export class TimesheetsService {
       return { canApproveGlobal: false, canRejectGlobal: false, approvalStage: null };
     }
 
-    if (user.role === UserRole.MANAGER) {
-      const hasSubmittedLines = timesheet.lines.some(
-        (line) =>
-          line.site?.managerId === user.userId &&
-          line.approvalStatus === TimesheetLineStatus.SUBMITTED,
-      );
-      const hasRejectedLines = timesheet.lines.some(
-        (line) =>
-          line.site?.managerId === user.userId &&
-          line.approvalStatus === TimesheetLineStatus.REJECTED,
-      );
+    const hasSiteLinesToApprove = timesheet.lines.some(
+      (line) =>
+        line.site?.managerId === user.userId &&
+        line.site.managerId !== timesheet.userId &&
+        line.approvalStatus === TimesheetLineStatus.SUBMITTED,
+    );
+    const hasRejectedSiteLines = timesheet.lines.some(
+      (line) =>
+        line.site?.managerId === user.userId &&
+        line.site.managerId !== timesheet.userId &&
+        line.approvalStatus === TimesheetLineStatus.REJECTED,
+    );
+    if (hasSiteLinesToApprove) {
       return {
-        canApproveGlobal: hasSubmittedLines && !hasRejectedLines,
+        canApproveGlobal: !hasRejectedSiteLines,
         canRejectGlobal: false,
-        approvalStage: hasSubmittedLines && !hasRejectedLines ? 'SITE' : null,
+        approvalStage: !hasRejectedSiteLines ? 'SITE' : null,
       };
     }
 
-    if (user.role === UserRole.PROJECT_MANAGER) {
-      const allSiteValidated =
-        timesheet.lines.length > 0 &&
-        timesheet.lines.every(
-          (line) =>
-            line.approvalStatus === TimesheetLineStatus.SITE_APPROVED ||
+    const projectScopedLines = timesheet.lines.filter(
+      (line) => line.site?.project?.projectManagerId === user.userId,
+    );
+    const hasDirectManagerLines = projectScopedLines.some(
+      (line) =>
+        line.site?.managerId === timesheet.userId &&
+        line.approvalStatus === TimesheetLineStatus.SUBMITTED,
+    );
+    const hasPreApprovedEmployeeLines = projectScopedLines.some(
+      (line) =>
+        line.site?.managerId !== timesheet.userId &&
+        line.approvalStatus === TimesheetLineStatus.SITE_APPROVED,
+    );
+    const allLinesReadyForProject =
+      timesheet.lines.length > 0 &&
+      timesheet.lines.every((line) =>
+        line.site?.managerId === timesheet.userId
+          ? line.approvalStatus === TimesheetLineStatus.SUBMITTED ||
+            line.approvalStatus === TimesheetLineStatus.APPROVED
+          : line.approvalStatus === TimesheetLineStatus.SITE_APPROVED ||
             line.approvalStatus === TimesheetLineStatus.APPROVED,
-        );
-      const hasScopedLines = timesheet.lines.some(
-        (line) =>
-          line.site?.project?.projectManagerId === user.userId &&
-          line.approvalStatus === TimesheetLineStatus.SITE_APPROVED,
       );
+    const hasProjectLinesToApprove = hasDirectManagerLines || hasPreApprovedEmployeeLines;
+    if (allLinesReadyForProject && hasProjectLinesToApprove) {
       return {
-        canApproveGlobal: allSiteValidated && hasScopedLines,
-        canRejectGlobal: allSiteValidated && timesheet.user.role === UserRole.EMPLOYEE && hasScopedLines,
-        approvalStage: allSiteValidated && hasScopedLines ? 'PROJECT' : null,
+        canApproveGlobal: true,
+        canRejectGlobal: hasPreApprovedEmployeeLines && !hasDirectManagerLines,
+        approvalStage: 'PROJECT',
       };
     }
 
@@ -659,6 +686,7 @@ export class TimesheetsService {
     const timesheet = await this.repository.findFirstOrThrow({
       where: { id, ...(await this.scope(user)) },
       include: {
+        user: { select: { role: true } },
         lines: {
           where: { id: lineId },
           include: { site: { include: { project: true } } },
@@ -889,12 +917,23 @@ export class TimesheetsService {
   }
 
   private async scope(user: CurrentUserContext): Promise<Prisma.TimesheetWhereInput> {
+    const draftVisibility: Prisma.TimesheetWhereInput = {
+      OR: [
+        { userId: user.userId },
+        { status: { not: TimesheetStatus.DRAFT } },
+      ],
+    };
+
     if (user.role === UserRole.SUPER_ADMIN) {
-      return {};
+      return draftVisibility;
     }
 
     const tenantId = user.tenantId ?? '__missing__';
     const managedUserIds = await this.hierarchy.managedUserIds(user);
-    return managedUserIds ? { tenantId, userId: { in: [...new Set([user.userId, ...managedUserIds])] } } : { tenantId };
+    const hierarchyScope: Prisma.TimesheetWhereInput = managedUserIds
+      ? { userId: { in: [...new Set([user.userId, ...managedUserIds])] } }
+      : {};
+
+    return { tenantId, AND: [hierarchyScope, draftVisibility] };
   }
 }

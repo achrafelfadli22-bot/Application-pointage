@@ -184,6 +184,18 @@ export const api = {
   me: () => apiRequest<SessionPayload>('/auth/me'),
   logout: () => apiRequest<{ message: string }>('/auth/logout', { method: 'POST' }),
   dashboard: () => apiRequest('/dashboard/summary'),
+  plannings: () => apiRequest('/planning'),
+  planningScope: () => apiRequest('/planning/scope'),
+  planningMyPeriod: (start: string, end: string, projectId?: string) =>
+    apiRequest(`/planning/my-period?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`),
+  planning: (id: string) => apiRequest(`/planning/${id}`),
+  createPlanning: (data: Record<string, unknown>) =>
+    apiRequest('/planning', { method: 'POST', body: JSON.stringify(data) }),
+  updatePlanning: (id: string, data: Record<string, unknown>) =>
+    apiRequest(`/planning/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  publishPlanning: (id: string) => apiRequest(`/planning/${id}/publish`, { method: 'POST' }),
+  reopenPlanning: (id: string) => apiRequest(`/planning/${id}/reopen`, { method: 'POST' }),
+  deletePlanning: (id: string) => apiRequest(`/planning/${id}`, { method: 'DELETE' }),
   employees: () => apiRequest('/employees'),
   employee: (id: string) => apiRequest(`/employees/${id}`),
   projects: () => apiRequest('/projects'),
@@ -195,6 +207,7 @@ export const api = {
   deleteProject: (id: string) =>
     apiRequest(`/projects/${id}`, { method: 'DELETE' }),
   sites: () => apiRequest('/sites'),
+  sitesForUser: (userId: string) => apiRequest(`/sites?userId=${encodeURIComponent(userId)}`),
   site: (id: string) => apiRequest(`/sites/${id}`),
   attendance: () => apiRequest('/attendance'),
   attendanceToday: () => apiRequest('/attendance/today'),
@@ -234,7 +247,9 @@ export const api = {
   leaveTypes: () => apiRequest('/leave/types'),
   leaveBalances: (userId?: string) =>
     apiRequest(`/leave/balances${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),
-  leaveRequests: () => apiRequest('/leave/requests'),
+  leaveRequests: (scope?: 'mine' | 'managed') =>
+    apiRequest(`/leave/requests${scope ? `?scope=${scope}` : ''}`),
+  leaveCapabilities: () => apiRequest('/leave/capabilities'),
   createLeaveRequest: (data: Record<string, unknown>) =>
     apiRequest('/leave/requests', { method: 'POST', body: JSON.stringify(data) }),
   submitLeaveRequest: (id: string) =>

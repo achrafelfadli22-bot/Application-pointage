@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   Download, Loader2, CalendarDays, Users, Building2,
-  Umbrella, MapPinOff, CreditCard, CheckCircle2,
+  Umbrella, CreditCard, CheckCircle2,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
@@ -14,7 +14,6 @@ import { cn } from '@/lib/utils';
 import { downloadExcel } from '@/lib/excel-export';
 import {
   buildAttendanceSheet,
-  buildGpsAnomaliesSheet,
   buildHoursBySiteSheet,
   buildHoursByEmployeeSheet,
   buildTimesheetsSheet,
@@ -41,14 +40,6 @@ const RAPPORTS: RapportDef[] = [
     description: 'Liste des entrées/sorties par employé et par jour, avec statut de validation.',
     categorie: 'presence',
     icon: CalendarDays,
-    roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'],
-  },
-  {
-    nom: 'Anomalies GPS',
-    endpoint: 'gps-anomalies',       // GET /api/reports/gps-anomalies
-    description: 'Pointages hors périmètre site — à traiter avant validation.',
-    categorie: 'presence',
-    icon: MapPinOff,
     roles: ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'],
   },
   // Opérations
@@ -197,7 +188,6 @@ export default function ReportsPage() {
       // Convert to Excel sheets
       const builders: Record<string, (d: unknown[]) => ReturnType<typeof buildAttendanceSheet>> = {
         'attendance':       buildAttendanceSheet,
-        'gps-anomalies':    buildGpsAnomaliesSheet,
         'hours-by-site':    buildHoursBySiteSheet,
         'hours-by-employee':buildHoursByEmployeeSheet,
         'timesheets':       buildTimesheetsSheet,

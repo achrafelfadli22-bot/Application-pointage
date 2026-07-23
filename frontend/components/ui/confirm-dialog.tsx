@@ -2,7 +2,7 @@
 
 import * as Dialog from '@radix-ui/react-dialog';
 import { X } from 'lucide-react';
-import { DangerButton, SecondaryButton } from './buttons';
+import { DangerButton, PrimaryButton, SecondaryButton } from './buttons';
 
 export function ConfirmDialog({
   trigger,
@@ -10,12 +10,14 @@ export function ConfirmDialog({
   description,
   onConfirm,
   confirmLabel = 'Confirmer',
+  tone = 'danger',
 }: {
   trigger: React.ReactNode;
   title: string;
   description: string;
   onConfirm: () => void;
   confirmLabel?: string;
+  tone?: 'danger' | 'primary';
 }) {
   return (
     <Dialog.Root>
@@ -38,9 +40,11 @@ export function ConfirmDialog({
                 <SecondaryButton type="button">Annuler</SecondaryButton>
               </Dialog.Close>
               <Dialog.Close asChild>
-                <DangerButton type="button" onClick={onConfirm}>
-                  {confirmLabel}
-                </DangerButton>
+                {tone === 'primary' ? (
+                  <PrimaryButton type="button" onClick={onConfirm}>{confirmLabel}</PrimaryButton>
+                ) : (
+                  <DangerButton type="button" onClick={onConfirm}>{confirmLabel}</DangerButton>
+                )}
               </Dialog.Close>
             </div>
           </div>

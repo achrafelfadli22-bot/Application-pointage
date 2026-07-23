@@ -18,13 +18,9 @@ export class HierarchyService {
       return [user.userId];
     }
 
-    if (user.role === UserRole.EMPLOYEE) {
-      return [user.userId];
-    }
-
     const sites = await this.prisma.site.findMany({
       where: this.managedSitesWhere(user),
-      select: { id: true, managerId: true },
+      select: { id: true, managerId: true, project: { select: { projectManagerId: true } } },
     });
 
     if (!sites.length) {
@@ -52,7 +48,9 @@ export class HierarchyService {
       select: { userId: true },
     });
 
-    const projectSiteManagerIds = user.role === UserRole.PROJECT_MANAGER ? [...siteManagerIds] : [];
+    const projectSiteManagerIds = sites.some((site) => site.project?.projectManagerId === user.userId)
+      ? [...siteManagerIds]
+      : [];
 
     return [
       ...new Set([
@@ -72,31 +70,24 @@ export class HierarchyService {
       return [];
     }
 
-    if (user.role === UserRole.EMPLOYEE) {
-      const sites = await this.prisma.site.findMany({
-        where: {
-          tenantId: user.tenantId,
-          deletedAt: null,
-          OR: [
-            {
-              assignments: {
-                some: {
-                  userId: user.userId,
-                  ...this.activeAssignmentWhere(),
-                },
+    const sites = await this.prisma.site.findMany({
+      where: {
+        tenantId: user.tenantId,
+        deletedAt: null,
+        OR: [
+          { managerId: user.userId },
+          { project: { projectManagerId: user.userId } },
+          {
+            assignments: {
+              some: {
+                userId: user.userId,
+                ...this.activeAssignmentWhere(),
               },
             },
-            { employeeProfiles: { some: { userId: user.userId } } },
-          ],
-        },
-        select: { id: true },
-      });
-
-      return sites.map((site) => site.id);
-    }
-
-    const sites = await this.prisma.site.findMany({
-      where: this.managedSitesWhere(user),
+          },
+          { employeeProfiles: { some: { userId: user.userId } } },
+        ],
+      },
       select: { id: true },
     });
 
@@ -113,11 +104,7 @@ export class HierarchyService {
       return 'ADMIN';
     }
 
-    if (
-      (user.role !== UserRole.MANAGER && user.role !== UserRole.PROJECT_MANAGER) ||
-      !user.tenantId ||
-      user.tenantId !== tenantId
-    ) {
+    if (!user.tenantId || user.tenantId !== tenantId) {
       return null;
     }
 
@@ -170,6 +157,22 @@ export class HierarchyService {
     return { n1Ids, n2Ids };
   }
 
+  async isProjectManagerForUser(tenantId: string, targetUserId: string, approverId: string) {
+    const site = await this.prisma.site.findFirst({
+      where: {
+        tenantId,
+        deletedAt: null,
+        project: { projectManagerId: approverId },
+        OR: [
+          { assignments: { some: { userId: targetUserId, ...this.activeAssignmentWhere() } } },
+          { employeeProfiles: { some: { userId: targetUserId } } },
+        ],
+      },
+      select: { id: true },
+    });
+    return Boolean(site);
+  }
+
   private async defaultApprovalSitesFor(tenantId: string, targetUserId: string) {
     const [assignments, employee] = await Promise.all([
       this.prisma.siteAssignment.findMany({
@@ -205,15 +208,11 @@ export class HierarchyService {
   private managedSitesWhere(user: CurrentUserContext): Prisma.SiteWhereInput {
     const tenantId = user.tenantId ?? '__missing__';
 
-    if (user.role === UserRole.PROJECT_MANAGER) {
-      return { tenantId, deletedAt: null, project: { projectManagerId: user.userId } };
-    }
-
-    if (user.role === UserRole.MANAGER) {
-      return { tenantId, deletedAt: null, managerId: user.userId };
-    }
-
-    return { tenantId, deletedAt: null, id: '__none__' };
+    return {
+      tenantId,
+      deletedAt: null,
+      OR: [{ managerId: user.userId }, { project: { projectManagerId: user.userId } }],
+    };
   }
 
   private dateOnly(value: Date) {

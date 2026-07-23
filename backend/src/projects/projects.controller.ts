@@ -51,7 +51,7 @@ export class ProjectsController {
   }
 
   @Put(':id')
-  @Roles(UserRole.RESOURCE_MANAGER, UserRole.HR)
+  @Roles(UserRole.HR)
   update(@CurrentUser() user: CurrentUserContext, @Param('id') id: string, @Body() dto: UpdateProjectDto) {
     return this.service.update(user, id, dto);
   }

@@ -1,0 +1,6 @@
+http://pointage.futura {
+	encode zstd gzip
+
+	reverse_proxy /api/* api:4000
+	reverse_proxy web:3000
+}

@@ -95,7 +95,7 @@ const services = [
 ];
 
 const pointageFeatures = [
-  "Pointage GPS site en temps réel",
+  "Suivi des feuilles de temps en temps réel",
   "Feuilles de temps hebdomadaires / mensuelles",
   "Demandes et suivi des congés",
   "Validation hiérarchique N+1 / N+2",
@@ -577,7 +577,7 @@ export function LandingPage() {
                 </div>
               </div>
               <div className="mt-6 grid grid-cols-3 gap-3">
-                {["Pointage GPS", "Feuilles de temps", "Congés", "Équipe", "Rapports"].map((item) => (
+                {["Planification", "Feuilles de temps", "Congés", "Équipe", "Rapports"].map((item) => (
                   <div
                     key={item}
                     className="rounded-lg border p-3 text-center text-xs font-semibold transition hover:opacity-80"

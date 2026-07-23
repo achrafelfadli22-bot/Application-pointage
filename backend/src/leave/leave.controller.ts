@@ -10,9 +10,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
-import { LeaveRequestStatus, UserRole } from '@prisma/client';
+import { LeaveRequestStatus } from '@prisma/client';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUserContext } from '../common/types';
 import { CreateLeaveRequestDto } from './dto/create-leave-request.dto';
 import { RejectLeaveRequestDto } from './dto/reject-leave-request.dto';
@@ -34,9 +33,18 @@ export class LeaveController {
     return this.service.findBalances(user, userId);
   }
 
+  @Get('capabilities')
+  capabilities(@CurrentUser() user: CurrentUserContext) {
+    return this.service.capabilities(user);
+  }
+
   @Get('requests')
-  requests(@CurrentUser() user: CurrentUserContext, @Query('status') status?: LeaveRequestStatus) {
-    return this.service.findRequests(user, status);
+  requests(
+    @CurrentUser() user: CurrentUserContext,
+    @Query('status') status?: LeaveRequestStatus,
+    @Query('scope') scope?: 'mine' | 'managed',
+  ) {
+    return this.service.findRequests(user, status, scope);
   }
 
   @Post('requests')
@@ -50,13 +58,11 @@ export class LeaveController {
   }
 
   @Post('requests/:id/approve')
-  @Roles(UserRole.RESOURCE_MANAGER, UserRole.HR, UserRole.PROJECT_MANAGER, UserRole.MANAGER)
   approve(@CurrentUser() user: CurrentUserContext, @Param('id') id: string) {
     return this.service.approve(user, id);
   }
 
   @Post('requests/:id/reject')
-  @Roles(UserRole.RESOURCE_MANAGER, UserRole.HR, UserRole.PROJECT_MANAGER, UserRole.MANAGER)
   reject(@CurrentUser() user: CurrentUserContext, @Param('id') id: string, @Body() dto: RejectLeaveRequestDto) {
     return this.service.reject(user, id, dto.reason);
   }

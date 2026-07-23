@@ -7,6 +7,7 @@ import { Readable } from 'stream';
 export class StorageService {
   private readonly client: Client;
   private readonly bucket: string;
+  private bucketReady?: Promise<void>;
 
   constructor(private readonly config: ConfigService) {
     this.bucket = this.config.get<string>('MINIO_BUCKET') ?? 'pointage360';
@@ -23,16 +24,33 @@ export class StorageService {
     return `${tenantId}/${category}/${Date.now()}-${filename}`;
   }
 
-  putObject(key: string, stream: Readable, size: number, metadata?: Record<string, string>) {
+  async putObject(key: string, stream: Readable, size: number, metadata?: Record<string, string>) {
+    await this.ensureBucket();
     return this.client.putObject(this.bucket, key, stream, size, metadata);
   }
 
-  presignedGetObject(key: string, expirySeconds: number) {
+  async presignedGetObject(key: string, expirySeconds: number) {
+    await this.ensureBucket();
     return this.client.presignedGetObject(this.bucket, key, expirySeconds);
   }
 
   async check() {
-    await this.client.listBuckets();
+    await this.ensureBucket();
+  }
+
+  private ensureBucket() {
+    if (!this.bucketReady) {
+      this.bucketReady = (async () => {
+        const exists = await this.client.bucketExists(this.bucket);
+        if (!exists) {
+          await this.client.makeBucket(this.bucket, 'us-east-1');
+        }
+      })().catch((error) => {
+        this.bucketReady = undefined;
+        throw error;
+      });
+    }
+    return this.bucketReady;
   }
 
   private readBoolean(key: string, fallback: boolean) {

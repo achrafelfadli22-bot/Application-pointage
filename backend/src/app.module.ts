@@ -19,6 +19,7 @@ import { MailModule } from './mail/mail.module';
 import { LeaveModule } from './leave/leave.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { PlanningModule } from './planning/planning.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ReportsModule } from './reports/reports.module';
 import { SettingsModule } from './settings/settings.module';
@@ -49,6 +50,7 @@ import { validateEnv } from './config/env.validation';
       }),
     }),
     PrismaModule,
+    PlanningModule,
     CommonModule,
     AuthModule,
     TenantsModule,

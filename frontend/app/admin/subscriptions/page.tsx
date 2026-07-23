@@ -115,7 +115,7 @@ function PlanModal({
               {field('maxUsers', 'Utilisateurs max *', 'number', 'ex: 250')}
               {field('maxSites', 'Sites max *', 'number', 'ex: 50')}
             </div>
-            {field('features', 'Fonctionnalités (séparées par virgule)', 'text', 'ex: GPS, Rapports, Export paie')}
+            {field('features', 'Fonctionnalités (séparées par virgule)', 'text', 'ex: Rapports, Congés, Export paie')}
             {error && <p className="text-sm text-dangerText">{error}</p>}
             <div className="flex justify-end gap-2">
               <Dialog.Close asChild>

@@ -28,7 +28,8 @@ type Project = {
 
 type Employee = {
   id: string;
-  user: { id: string; firstName: string; lastName: string; email: string; role: string };
+  status: string;
+  user: { id: string; firstName: string; lastName: string; email: string; role: string; status: string };
 };
 type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[] };
 
@@ -42,7 +43,15 @@ const emptyForm = {
   status: 'ACTIVE',
 };
 
-function NewProjectModal({ onCreated, clientOptions }: { onCreated: () => void; clientOptions: string[] }) {
+function NewProjectModal({
+  onCreated,
+  clientOptions,
+  employees,
+}: {
+  onCreated: () => void;
+  clientOptions: string[];
+  employees: Employee[];
+}) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [submitting, setSubmitting] = useState(false);
@@ -53,8 +62,8 @@ function NewProjectModal({ onCreated, clientOptions }: { onCreated: () => void; 
   }
 
   async function handleSubmit() {
-    if (!form.code || !form.name) {
-      setError('Code et nom sont obligatoires.');
+    if (!form.code || !form.name || !form.projectManagerId) {
+      setError('Le code, le nom et le chef de projet sont obligatoires.');
       return;
     }
 
@@ -62,7 +71,6 @@ function NewProjectModal({ onCreated, clientOptions }: { onCreated: () => void; 
     setError(null);
     try {
       const payload: Record<string, unknown> = { ...form };
-      delete payload.projectManagerId;
       if (!form.clientName) delete payload.clientName;
       if (!form.startDate) delete payload.startDate;
       if (!form.plannedEndDate) delete payload.plannedEndDate;
@@ -103,9 +111,16 @@ function NewProjectModal({ onCreated, clientOptions }: { onCreated: () => void; 
                   </option>
                 ))}
               </SelectField>
-              <div className="rounded-md border border-borderSoft bg-grayCard/40 px-3 py-2 text-sm text-mutedText">
-                Le Resource Manager affectera le chef de projet après la création.
-              </div>
+              <SelectField label="Chef de projet" value={form.projectManagerId} onChange={(e) => setForm((p) => ({ ...p, projectManagerId: e.target.value }))}>
+                <option value="">Sélectionner</option>
+                {employees
+                  .filter((employee) => employee.status === 'ACTIVE' && employee.user.status !== 'INACTIVE')
+                  .map((employee) => (
+                    <option key={employee.user.id} value={employee.user.id}>
+                      {employee.user.firstName} {employee.user.lastName}
+                    </option>
+                  ))}
+              </SelectField>
               <SelectField label="Etat du projet" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
                 <option value="ACTIVE">Actif</option>
                 <option value="SUSPENDED">Suspendu</option>
@@ -139,6 +154,10 @@ export default function ProjectsPage() {
   );
   const myRole = tokenStore.session?.role ?? '';
   const canCreate = myRole === 'HR';
+  const { data: employees } = useApiData<Employee[]>(
+    () => (canCreate ? (api.employees() as Promise<Employee[]>) : Promise.resolve([])),
+    [],
+  );
   const clientOptions = Array.from(
     new Set(
       [...(siteOptions.clientOptions ?? []), ...data.map((project) => project.clientName)]
@@ -159,14 +178,6 @@ export default function ProjectsPage() {
     { header: 'Chef de projet', cell: ({ row }) => `${row.original.projectManager.firstName} ${row.original.projectManager.lastName}` },
     { header: 'Sites', cell: ({ row }) => row.original._count.sites },
     { header: 'Statut', cell: ({ row }) => <StatusBadge status={row.original.status} /> },
-    {
-      header: 'Actions',
-      cell: ({ row }) => (
-        <Link href={`/projects/${row.original.id}`} className="text-sm font-medium text-accent hover:underline">
-          Voir
-        </Link>
-      ),
-    },
   ];
 
   return (
@@ -175,7 +186,7 @@ export default function ProjectsPage() {
         <PageHeader
           title="Projets"
           description="Designation du chef de projet et rattachement des sites."
-          actions={canCreate ? <NewProjectModal onCreated={refresh} clientOptions={clientOptions} /> : undefined}
+          actions={canCreate ? <NewProjectModal onCreated={refresh} clientOptions={clientOptions} employees={employees} /> : undefined}
         />
 
         <div className="rounded-xl border border-borderSoft bg-surface p-4 shadow-card">
@@ -187,7 +198,7 @@ export default function ProjectsPage() {
           />
         </div>
 
-        <DataTable columns={columns} data={filtered} />
+        <DataTable columns={columns} data={filtered} getRowHref={(project) => `/projects/${project.id}`} />
       </div>
     </AppShell>
   );

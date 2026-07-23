@@ -9,8 +9,7 @@ type ReportPayload = {
     | 'attendance-daily'
     | 'hours-by-employee'
     | 'hours-by-site'
-    | 'leave-summary'
-    | 'gps-anomalies';
+    | 'leave-summary';
   from: string;
   to: string;
 };
@@ -53,9 +52,6 @@ export class ReportsProcessor extends WorkerHost {
         break;
       case 'leave-summary':
         data = await this.leaveSummary(tenantId, dateFrom, dateTo);
-        break;
-      case 'gps-anomalies':
-        data = await this.gpsAnomalies(tenantId, dateFrom, dateTo);
         break;
     }
 
@@ -197,23 +193,4 @@ export class ReportsProcessor extends WorkerHost {
     }));
   }
 
-  private async gpsAnomalies(tenantId: string, from: Date, to: Date) {
-    const punches = await this.prisma.attendancePunch.findMany({
-      where: { tenantId, punchDate: { gte: from, lte: to }, isGpsAnomaly: true },
-      include: {
-        user: { select: { firstName: true, lastName: true } },
-        site: { select: { code: true, name: true } },
-      },
-      orderBy: { punchDate: 'asc' },
-    });
-
-    return punches.map((p) => ({
-      date: p.punchDate.toISOString().slice(0, 10),
-      employee: `${p.user.firstName} ${p.user.lastName}`,
-      site: p.site?.name ?? '',
-      check_in_lat: p.checkInLatitude?.toString() ?? null,
-      check_in_lng: p.checkInLongitude?.toString() ?? null,
-      status: p.status,
-    }));
-  }
 }

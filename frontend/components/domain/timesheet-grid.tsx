@@ -152,14 +152,22 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
   const router = useRouter();
   const days = useMemo(() => getDays(timesheet.periodStart, timesheet.periodEnd), [timesheet.periodStart, timesheet.periodEnd]);
   const { data: projects } = useApiData<ProjectOption[]>(() => api.projects() as Promise<ProjectOption[]>, []);
-  const { data: sites } = useApiData<SiteOption[]>(() => api.sites() as Promise<SiteOption[]>, []);
+  const { data: sites } = useApiData<SiteOption[]>(
+    () => api.sitesForUser(timesheet.user.id) as Promise<SiteOption[]>,
+    [],
+    { fallbackMode: 'never' },
+  );
+  const availableProjects = useMemo(() => {
+    const projectIds = new Set(sites.map((site) => site.project?.id).filter(Boolean));
+    return projects.filter((project) => projectIds.has(project.id));
+  }, [projects, sites]);
   const { data: taskTypes } = useApiData<TimesheetTaskType[]>(
     () => api.settingsTimesheetTaskTypes() as Promise<TimesheetTaskType[]>,
     DEFAULT_TIMESHEET_TASK_TYPES,
   );
   const activeTaskTypes = taskTypes.filter((taskType) => taskType.isActive);
   const taskTypeLabels = Object.fromEntries(taskTypes.map((item) => [item.value, item.label]));
-  const defaultTaskType = activeTaskTypes[0]?.value ?? DEFAULT_TIMESHEET_TASK_TYPES[0]!.value;
+  const defaultTaskType = activeTaskTypes[0]?.value ?? '';
 
   const myRole = tokenStore.session?.role ?? '';
   const myUserId = tokenStore.session?.user?.id ?? '';
@@ -553,7 +561,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                         onChange={(event) => setProject(rowIndex, event.target.value)}
                       >
                         <option value="">Projet</option>
-                        {projects.map((project) => (
+                        {availableProjects.map((project) => (
                           <option key={project.id} value={project.id}>
                             {project.code} - {project.name}
                           </option>

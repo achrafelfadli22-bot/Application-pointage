@@ -79,7 +79,6 @@ export class ReportsService {
       totalMinutes: number;
       workedDays: number;
       lateCount: number;
-      gpsAnomalies: number;
       approved: number;
       pending: number;
       openPunches: number;
@@ -93,7 +92,6 @@ export class ReportsService {
           totalMinutes: 0,
           workedDays: 0,
           lateCount: 0,
-          gpsAnomalies: 0,
           approved: 0,
           pending: 0,
           openPunches: 0,
@@ -107,7 +105,6 @@ export class ReportsService {
       }
       if (!p.checkOutAt) row.openPunches += 1;
       if (p.durationMinutes) row.totalMinutes += p.durationMinutes;
-      if (p.isGpsAnomaly) row.gpsAnomalies += 1;
       if (p.status === 'APPROVED') row.approved += 1;
       else if (p.status === 'SUBMITTED' || p.status === 'N1_APPROVED') row.pending += 1;
     }
@@ -130,7 +127,6 @@ export class ReportsService {
         totalHours: Number((r.totalMinutes / 60).toFixed(2)),
         avgHoursPerDay: r.workedDays > 0 ? Number((r.totalMinutes / 60 / r.workedDays).toFixed(2)) : 0,
         lateArrivals: r.lateCount,
-        gpsAnomalies: r.gpsAnomalies,
         openPunches: r.openPunches,
         leaveDays,
         absentDays,
@@ -150,7 +146,6 @@ export class ReportsService {
           ? Number((rows.reduce((s, r) => s + r.attendanceRate, 0) / rows.length).toFixed(1))
           : 0,
       totalLateArrivals: rows.reduce((s, r) => s + r.lateArrivals, 0),
-      totalGpsAnomalies: rows.reduce((s, r) => s + r.gpsAnomalies, 0),
     };
 
     return {
@@ -182,8 +177,7 @@ export class ReportsService {
             id: true,
             code: true,
             name: true,
-            city: true,
-            status: true,
+            address: true,
             project: { select: { id: true, code: true, name: true, clientName: true } },
             manager: { select: { firstName: true, lastName: true } },
           },
@@ -228,21 +222,6 @@ export class ReportsService {
       }
     }
 
-    // Anomalies GPS par site
-    const gpsAnomalies = await this.prisma.attendancePunch.groupBy({
-      by: ['siteId'],
-      where: { ...tenantWhere, siteId: { not: null }, isGpsAnomaly: true, punchDate: { gte: startDate, lte: endDate } },
-      _count: { id: true },
-    });
-    const anomalyBySite = new Map(gpsAnomalies.map((g) => [g.siteId, g._count.id]));
-
-    const totalPunchesBySite = await this.prisma.attendancePunch.groupBy({
-      by: ['siteId'],
-      where: { ...tenantWhere, siteId: { not: null }, punchDate: { gte: startDate, lte: endDate } },
-      _count: { id: true },
-    });
-    const totalPunchMap = new Map(totalPunchesBySite.map((g) => [g.siteId, g._count.id]));
-
     const sites = [...bySite.entries()].map(([siteKey, r]) => {
       const totalMinutes = r.billableMinutes + r.nonBillableMinutes;
       const totalHours = Number((totalMinutes / 60).toFixed(2));
@@ -256,8 +235,6 @@ export class ReportsService {
                 r.weeklyHeadcounts.size).toFixed(1),
             )
           : 0;
-      const anomalies = anomalyBySite.get(siteKey) ?? 0;
-      const totalPunches = totalPunchMap.get(siteKey) ?? 0;
 
       return {
         site: r.site
@@ -265,8 +242,7 @@ export class ReportsService {
               id: r.site.id,
               code: r.site.code,
               name: r.site.name,
-              city: r.site.city,
-              status: r.site.status,
+              address: r.site.address,
               manager: r.site.manager ? `${r.site.manager.firstName} ${r.site.manager.lastName}` : null,
               project: r.site.project,
             }
@@ -278,7 +254,6 @@ export class ReportsService {
         headcount,
         avgWeeklyHeadcount,
         avgHoursPerEmployee: headcount > 0 ? Number((totalHours / headcount).toFixed(2)) : 0,
-        gpsAnomalyRate: totalPunches > 0 ? Number(((anomalies / totalPunches) * 100).toFixed(1)) : 0,
       };
     });
 
@@ -590,9 +565,9 @@ export class ReportsService {
     };
   }
 
-  // ─── Rapport 5 : Retards & anomalies GPS ─────────────────────────────────────
+  // ─── Rapport 5 : Retards ─────────────────────────────────────────────────────
 
-  async lateAndGpsAnomalies(user: CurrentUserContext, filters: ReportFilterDto) {
+  async lateArrivals(user: CurrentUserContext, filters: ReportFilterDto) {
     const tenantId = user.tenantId ?? '__missing__';
     const managedUserIds = await this.hierarchy.managedUserIds(user);
     const userIdFilter = this.buildUserIdFilter(managedUserIds, filters.userId);
@@ -619,19 +594,8 @@ export class ReportsService {
       orderBy: { punchDate: 'desc' },
     });
 
-    const totalPunches = punches.length;
-
     type LateAcc = { user: typeof punches[0]['user']; count: number; totalDelayMinutes: number };
     const lateByEmployee = new Map<string, LateAcc>();
-    const gpsAnomaliesList: Array<{
-      employee: string;
-      email: string;
-      site: string | null;
-      punchDate: string;
-      checkInAt: string;
-    }> = [];
-    type SiteGps = { site: typeof punches[0]['site']; anomalies: number; total: number };
-    const gpsBySite = new Map<string, SiteGps>();
 
     for (const p of punches) {
       if (p.checkInAt) {
@@ -642,22 +606,6 @@ export class ReportsService {
           const row = lateByEmployee.get(p.userId)!;
           row.count += 1;
           row.totalDelayMinutes += checkInMinutes - lateThresholdMinutes;
-        }
-      }
-
-      if (p.siteId) {
-        if (!gpsBySite.has(p.siteId)) gpsBySite.set(p.siteId, { site: p.site, anomalies: 0, total: 0 });
-        const siteRow = gpsBySite.get(p.siteId)!;
-        siteRow.total += 1;
-        if (p.isGpsAnomaly) {
-          siteRow.anomalies += 1;
-          gpsAnomaliesList.push({
-            employee: `${p.user.firstName} ${p.user.lastName}`,
-            email: p.user.email,
-            site: p.site?.name ?? null,
-            punchDate: p.punchDate.toISOString().slice(0, 10),
-            checkInAt: p.checkInAt?.toISOString() ?? '',
-          });
         }
       }
     }
@@ -672,8 +620,6 @@ export class ReportsService {
         punchDate: p.punchDate.toISOString().slice(0, 10),
       }));
 
-    const totalGpsAnomalies = gpsAnomaliesList.length;
-
     return {
       period: { start: startDate.toISOString().slice(0, 10), end: endDate.toISOString().slice(0, 10) },
       lateThreshold: `${workDayStart} + ${lateToleranceMinutes} min`,
@@ -687,19 +633,6 @@ export class ReportsService {
             avgDelayMinutes: Math.round(r.totalDelayMinutes / r.count),
           }))
           .sort((a, b) => b.count - a.count),
-      },
-      gpsAnomalies: {
-        total: totalGpsAnomalies,
-        anomalyRate: totalPunches > 0 ? Number(((totalGpsAnomalies / totalPunches) * 100).toFixed(1)) : 0,
-        bySite: [...gpsBySite.values()]
-          .map((r) => ({
-            site: r.site ? { code: r.site.code, name: r.site.name } : null,
-            anomalies: r.anomalies,
-            total: r.total,
-            rate: r.total > 0 ? Number(((r.anomalies / r.total) * 100).toFixed(1)) : 0,
-          }))
-          .sort((a, b) => b.anomalies - a.anomalies),
-        detail: gpsAnomaliesList.slice(0, filters.take ?? 100),
       },
       openPunches,
     };
@@ -731,8 +664,6 @@ export class ReportsService {
       leaveByType,
       pendingLeave,
       timesheetStats,
-      gpsAnomalyCount,
-      totalPunches,
     ] = await Promise.all([
       this.prisma.employeeProfile.count({ where: { ...tenantWhere, ...userScope, status: 'ACTIVE' } }),
       this.prisma.employeeProfile.count({
@@ -757,14 +688,14 @@ export class ReportsService {
       }),
       this.prisma.timesheet.groupBy({
         by: ['status'],
-        where: { ...tenantWhere, ...userScope, periodStart: { gte: startDate }, periodEnd: { lte: endDate } },
+        where: {
+          ...tenantWhere,
+          ...userScope,
+          OR: [{ userId: user.userId }, { status: { not: 'DRAFT' } }],
+          periodStart: { gte: startDate },
+          periodEnd: { lte: endDate },
+        },
         _count: { id: true },
-      }),
-      this.prisma.attendancePunch.count({
-        where: { ...tenantWhere, ...userScope, isGpsAnomaly: true, punchDate: { gte: startDate, lte: endDate } },
-      }),
-      this.prisma.attendancePunch.count({
-        where: { ...tenantWhere, ...userScope, punchDate: { gte: startDate, lte: endDate } },
       }),
     ]);
 
@@ -793,7 +724,13 @@ export class ReportsService {
 
     // Employés sans timesheet sur la période
     const usersWithTimesheetRaw = await this.prisma.timesheet.findMany({
-      where: { ...tenantWhere, ...userScope, periodStart: { gte: startDate }, periodEnd: { lte: endDate } },
+      where: {
+        ...tenantWhere,
+        ...userScope,
+        OR: [{ userId: user.userId }, { status: { not: 'DRAFT' } }],
+        periodStart: { gte: startDate },
+        periodEnd: { lte: endDate },
+      },
       select: { userId: true },
       distinct: ['userId'],
     });
@@ -818,8 +755,6 @@ export class ReportsService {
         totalHoursWorked: totalHours,
         avgHoursPerEmployee: activeEmployees > 0 ? Number((totalHours / activeEmployees).toFixed(2)) : 0,
         attendanceRate,
-        totalGpsAnomalies: gpsAnomalyCount,
-        gpsAnomalyRate: totalPunches > 0 ? Number(((gpsAnomalyCount / totalPunches) * 100).toFixed(1)) : 0,
       },
       leave: {
         totalDaysTaken: Number(leaveAgg._sum.durationDays ?? 0),
@@ -894,7 +829,7 @@ export class ReportsService {
     });
     const sites = await this.prisma.site.findMany({
       where: { id: { in: grouped.map((row) => row.siteId).filter(Boolean) as string[] } },
-      select: { id: true, code: true, name: true, city: true },
+      select: { id: true, code: true, name: true, address: true },
     });
     return grouped.map((row) => ({
       site: sites.find((item) => item.id === row.siteId) ?? null,
@@ -911,6 +846,7 @@ export class ReportsService {
       where: {
         ...this.tenantWhere(user),
         userId: await this.userIdFilter(user, filters.userId),
+        OR: [{ userId: user.userId }, { status: { not: 'DRAFT' } }],
         status: filters.status as never,
         periodStart: filters.startDate ? { gte: new Date(filters.startDate) } : undefined,
         periodEnd: filters.endDate ? { lte: new Date(filters.endDate) } : undefined,
@@ -955,21 +891,6 @@ export class ReportsService {
         leaveType: true,
       },
       orderBy: { startDate: 'desc' },
-      take,
-      skip,
-    });
-  }
-
-  async gpsAnomalies(user: CurrentUserContext, filters: ReportFilterDto) {
-    const take = Math.min(filters.take ?? 100, 500);
-    const skip = filters.skip ?? 0;
-    return this.prisma.attendancePunch.findMany({
-      where: { ...(await this.attendanceWhere(user, filters)), isGpsAnomaly: true },
-      include: {
-        user: { select: { firstName: true, lastName: true, email: true } },
-        site: { select: { code: true, name: true, latitude: true, longitude: true, gpsRadiusMeters: true } },
-      },
-      orderBy: { punchDate: 'desc' },
       take,
       skip,
     });

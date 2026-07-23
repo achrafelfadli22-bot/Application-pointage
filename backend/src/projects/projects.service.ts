@@ -59,10 +59,7 @@ export class ProjectsService {
       throw new ForbiddenException('Tenant scope is required');
     }
 
-    const defaultManager = await this.prisma.user.findFirstOrThrow({
-      where: { tenantId: user.tenantId, role: UserRole.RESOURCE_MANAGER, status: UserStatus.ACTIVE, deletedAt: null },
-      select: { id: true },
-    });
+    await this.assertProjectManager(user.tenantId, dto.projectManagerId);
 
     const project = await this.prisma.project.create({
       data: {
@@ -70,7 +67,7 @@ export class ProjectsService {
         code: dto.code,
         name: dto.name,
         clientName: dto.clientName,
-        projectManagerId: defaultManager.id,
+        projectManagerId: dto.projectManagerId,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
         status: dto.status,
@@ -97,17 +94,15 @@ export class ProjectsService {
 
     const project = await this.prisma.project.update({
       where: { id },
-      data:
-        user.role === UserRole.RESOURCE_MANAGER
-          ? { projectManagerId: dto.projectManagerId }
-          : {
-              code: dto.code,
-              name: dto.name,
-              clientName: dto.clientName,
-              startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-              plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
-              status: dto.status,
-            },
+      data: {
+        projectManagerId: dto.projectManagerId,
+        code: dto.code,
+        name: dto.name,
+        clientName: dto.clientName,
+        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+        plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
+        status: dto.status,
+      },
     });
 
     await this.auditLog.log({
@@ -152,12 +147,12 @@ export class ProjectsService {
         tenantId,
         deletedAt: null,
         status: UserStatus.ACTIVE,
-        role: UserRole.PROJECT_MANAGER,
       },
+      include: { employeeProfile: true },
     });
 
-    if (!candidate) {
-      throw new BadRequestException('Le chef de projet doit etre un utilisateur actif avec le role Chef de projet.');
+    if (!candidate?.employeeProfile || candidate.employeeProfile.status !== 'ACTIVE') {
+      throw new BadRequestException('Le chef de projet doit être un employé actif.');
     }
   }
 
@@ -167,6 +162,7 @@ export class ProjectsService {
     }
 
     const tenantId = user.tenantId ?? '__missing__';
+    if (user.role === UserRole.RESOURCE_MANAGER || user.role === UserRole.HR) return { tenantId };
     const ownAssignedProjectsScope: Prisma.ProjectWhereInput = {
       sites: {
         some: {
@@ -186,24 +182,12 @@ export class ProjectsService {
       },
     };
 
-    if (user.role === UserRole.PROJECT_MANAGER) {
-      return includeOwnAssignments
-        ? { tenantId, OR: [{ projectManagerId: user.userId }, ownAssignedProjectsScope] }
-        : { tenantId, projectManagerId: user.userId };
-    }
-    if (user.role === UserRole.MANAGER) {
-      return includeOwnAssignments
-        ? {
-            tenantId,
-            OR: [{ sites: { some: { managerId: user.userId, deletedAt: null } } }, ownAssignedProjectsScope],
-          }
-        : { tenantId, sites: { some: { managerId: user.userId, deletedAt: null } } };
-    }
-    if (user.role === UserRole.EMPLOYEE) {
-      return { tenantId, ...ownAssignedProjectsScope };
-    }
-
-    return { tenantId };
+    const operationalScope: Prisma.ProjectWhereInput[] = [
+      { projectManagerId: user.userId },
+      { sites: { some: { managerId: user.userId, deletedAt: null } } },
+    ];
+    if (includeOwnAssignments) operationalScope.push(ownAssignedProjectsScope);
+    return { tenantId, OR: operationalScope };
   }
 
   private siteScope(user: CurrentUserContext): Prisma.SiteWhereInput {
@@ -227,20 +211,9 @@ export class ProjectsService {
       ],
     };
 
-    if (user.role === UserRole.PROJECT_MANAGER) {
-      return {
-        ...base,
-        OR: [{ project: { projectManagerId: user.userId } }, ownSiteLink],
-      };
-    }
-
-    if (user.role === UserRole.MANAGER) {
-      return {
-        ...base,
-        OR: [{ managerId: user.userId }, ownSiteLink],
-      };
-    }
-
-    return { ...base, ...ownSiteLink };
+    return {
+      ...base,
+      OR: [{ project: { projectManagerId: user.userId } }, { managerId: user.userId }, ownSiteLink],
+    };
   }
 }

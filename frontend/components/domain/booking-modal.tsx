@@ -36,8 +36,9 @@ export function BookingModal() {
           setLeaveTypes(types);
           const firstType = types[0];
           if (firstType) setForm((p) => ({ ...p, leaveTypeId: firstType.id }));
+          if (!firstType) setError('Aucun type de congé actif n’est disponible.');
         })
-        .catch(() => {});
+        .catch(() => setError('Impossible de charger les types de congé.'));
 
       const currentYear = new Date().getFullYear();
       api.leaveBalances()
@@ -72,7 +73,12 @@ export function BookingModal() {
       if (file && created?.id) {
         try {
           await api.uploadLeaveAttachment(created.id, file);
-        } catch {
+        } catch (uploadError) {
+          throw new Error(
+            uploadError instanceof Error
+              ? `Le justificatif n'a pas été sauvegardé : ${uploadError.message}`
+              : "Le justificatif n'a pas été sauvegardé.",
+          );
           // L'upload est optionnel — ne pas bloquer la soumission
         }
       }
@@ -101,13 +107,7 @@ export function BookingModal() {
     setSuccess(false);
   }
 
-  const demoTypes: LeaveType[] = [
-    { id: 'demo-1', name: '[MAR] Annual Leave', annualAllowanceDays: 18 },
-    { id: 'demo-2', name: '[MAR] Sick Leave', annualAllowanceDays: 6 },
-    { id: 'demo-3', name: '[MAR] Marriage Leave', annualAllowanceDays: 4 },
-  ];
-
-  const displayTypes = leaveTypes.length > 0 ? leaveTypes : demoTypes;
+  const displayTypes = leaveTypes;
 
   return (
     <Dialog.Root open={open} onOpenChange={(v) => { setOpen(v); if (!v) resetForm(); }}>
@@ -137,6 +137,7 @@ export function BookingModal() {
                   value={form.leaveTypeId}
                   onChange={(e) => setForm((p) => ({ ...p, leaveTypeId: e.target.value }))}
                 >
+                  <option value="">Sélectionner un type de congé</option>
                   {displayTypes.map((t) => (
                     <option key={t.id} value={t.id}>{t.name}</option>
                   ))}
@@ -287,7 +288,7 @@ export function BookingModal() {
                       {/* Récap */}
                       {[
                         ['Cette demande', durationLabel],
-                        ['Approbateurs', 'Manager · RH'],
+                        ['Approbateurs', 'Chef de projet · Resource Manager'],
                       ].map(([label, value]) => (
                         <div key={label} className="flex justify-between border-b border-borderSoft py-3 text-sm last:border-0">
                           <span className="text-mutedText">{label}</span>

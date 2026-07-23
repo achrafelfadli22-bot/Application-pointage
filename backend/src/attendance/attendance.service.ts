@@ -2,7 +2,6 @@ import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/com
 import { AttendanceStatus, Prisma, UserRole, WorkLocation } from '@prisma/client';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { HierarchyService } from '../common/hierarchy.service';
-import { haversineDistanceMeters } from '../common/utils/haversine';
 import { MailService } from '../mail/mail.service';
 import { CurrentUserContext } from '../common/types';
 import { PrismaService } from '../prisma/prisma.service';
@@ -46,7 +45,6 @@ export class AttendanceService {
         })
       : null;
 
-    const isGpsAnomaly = this.isGpsAnomaly(site, dto.latitude, dto.longitude);
     const now = new Date();
 
     const punch = await this.prisma.attendancePunch.create({
@@ -57,9 +55,6 @@ export class AttendanceService {
         punchDate: this.dateOnly(now),
         checkInAt: now,
         workLocation: dto.workLocation,
-        checkInLatitude: dto.latitude,
-        checkInLongitude: dto.longitude,
-        isGpsAnomaly,
         employeeComment: dto.employeeComment,
         status: AttendanceStatus.DRAFT,
       },
@@ -72,7 +67,7 @@ export class AttendanceService {
       action: 'attendance.check_in',
       entityType: 'AttendancePunch',
       entityId: punch.id,
-      metadata: { siteId: site?.id, isGpsAnomaly },
+      metadata: { siteId: site?.id },
     });
 
     // Email de confirmation de pointage (best-effort, non bloquant)
@@ -108,17 +103,12 @@ export class AttendanceService {
 
     const now = new Date();
     const durationMinutes = Math.max(0, Math.round((now.getTime() - punch.checkInAt.getTime()) / 60000));
-    const isGpsAnomaly = punch.isGpsAnomaly || this.isGpsAnomaly(punch.site, dto.latitude, dto.longitude);
-
     const updated = await this.prisma.attendancePunch.update({
       where: { id: punch.id },
       data: {
         checkOutAt: now,
         durationMinutes,
-        checkOutLatitude: dto.latitude,
-        checkOutLongitude: dto.longitude,
         employeeComment: dto.employeeComment ?? punch.employeeComment,
-        isGpsAnomaly,
       },
       include: { site: true, user: { select: { firstName: true, lastName: true, email: true } } },
     });
@@ -129,7 +119,7 @@ export class AttendanceService {
       action: 'attendance.check_out',
       entityType: 'AttendancePunch',
       entityId: updated.id,
-      metadata: { durationMinutes, isGpsAnomaly },
+      metadata: { durationMinutes },
     });
 
     return updated;
@@ -137,7 +127,7 @@ export class AttendanceService {
 
   async findAll(
     user: CurrentUserContext,
-    filters: { siteId?: string; userId?: string; status?: AttendanceStatus; gpsAnomaly?: boolean },
+    filters: { siteId?: string; userId?: string; status?: AttendanceStatus },
   ) {
     return this.prisma.attendancePunch.findMany({
       where: {
@@ -145,7 +135,6 @@ export class AttendanceService {
         siteId: filters.siteId,
         userId: await this.scopedUserIdFilter(user, filters.userId),
         status: filters.status,
-        isGpsAnomaly: filters.gpsAnomaly,
       },
       include: {
         user: { select: { id: true, firstName: true, lastName: true, email: true } },
@@ -233,23 +222,6 @@ export class AttendanceService {
     });
 
     return updated;
-  }
-
-  private isGpsAnomaly(
-    site: { latitude: Prisma.Decimal | null; longitude: Prisma.Decimal | null; gpsRadiusMeters: number } | null,
-    latitude?: number,
-    longitude?: number,
-  ) {
-    if (!site?.latitude || !site.longitude || latitude === undefined || longitude === undefined) {
-      return false;
-    }
-
-    const distance = haversineDistanceMeters(
-      { latitude, longitude },
-      { latitude: Number(site.latitude), longitude: Number(site.longitude) },
-    );
-
-    return distance > site.gpsRadiusMeters;
   }
 
   private async resolveApprovalStatus(

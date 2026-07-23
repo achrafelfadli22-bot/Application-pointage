@@ -6,7 +6,6 @@ import {
   BarChart3,
   BriefcaseBusiness,
   Building2,
-  CalendarDays,
   CheckCircle2,
   ClipboardCheck,
   Clock3,
@@ -19,15 +18,15 @@ import {
 import { Pointage360Logo } from '@/components/landing/pointage360-logo';
 
 export const metadata: Metadata = {
-  title: 'Pointage360 - SaaS pointage GPS, feuilles de temps et RH terrain',
+  title: 'Pointage360 - Feuilles de temps et RH terrain',
   description:
-    'Pointage360 centralise le pointage GPS, les feuilles de temps, les congés, le planning, les sites et les rapports RH/paie.',
+    'Pointage360 centralise les feuilles de temps, la planification, les congés, les sites et les rapports RH/paie.',
 };
 
 const modules = [
   {
     icon: MapPinned,
-    title: 'Pointage GPS',
+    title: 'Suivi des temps',
     text: 'Check-in et check-out mobiles avec perimetre site, statut journalier et suivi des anomalies.',
     benefit: 'Controle terrain fiable',
   },
@@ -36,12 +35,6 @@ const modules = [
     title: 'Feuilles de temps',
     text: 'Saisie des heures par projet, site et type de tache, avec soumission et validation.',
     benefit: 'Heures structurees',
-  },
-  {
-    icon: CalendarDays,
-    title: 'Planning equipe',
-    text: 'Vision des presences, absences, week-ends, jours feries et retards sur une grille claire.',
-    benefit: 'Organisation visible',
   },
   {
     icon: ClipboardCheck,
@@ -58,7 +51,7 @@ const modules = [
   {
     icon: BarChart3,
     title: 'Rapports & paie',
-    text: 'Exports Excel, heures par site, anomalies GPS et donnees pretes pour la paie.',
+    text: 'Exports Excel, heures par site et donnees pretes pour la paie.',
     benefit: 'Decision rapide',
   },
 ];
@@ -192,7 +185,7 @@ export default function Pointage360LandingPage() {
               </SecondaryCta>
             </div>
             <div className="mt-10 grid gap-3 text-sm text-mutedText sm:grid-cols-3">
-              {['Pointage GPS', 'Validation N+1/N+2', 'Exports RH & paie'].map((item) => (
+              {['Feuilles de temps', 'Validation N+1/N+2', 'Exports RH & paie'].map((item) => (
                 <div key={item} className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 text-accent" />
                   <span>{item}</span>
@@ -272,7 +265,7 @@ export default function Pointage360LandingPage() {
       <section id="terrain" className="border-y border-borderSoft bg-pageBg px-4 py-20 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
           <div>
-            <SectionLabel>Pointage GPS</SectionLabel>
+            <SectionLabel>Suivi des temps</SectionLabel>
             <h2 className="mt-3 text-3xl font-semibold text-navy sm:text-4xl">
               Un pointage mobile adapte aux equipes terrain.
             </h2>
@@ -280,7 +273,7 @@ export default function Pointage360LandingPage() {
               Les collaborateurs pointent depuis leur telephone, dans le perimetre du site, avec un statut journalier clair pour eux et pour leurs managers.
             </p>
             <div className="mt-7 grid gap-3">
-              {['Check-in et check-out mobile', 'Perimetre GPS par site', 'Retards, absences et anomalies visibles'].map((item) => (
+              {['Saisie des heures par période', 'Validation hiérarchique', 'Retards et absences visibles'].map((item) => (
                 <div key={item} className="flex items-center gap-3 text-sm text-bodyText">
                   <Clock3 className="h-4 w-4 text-accent" />
                   <span>{item}</span>
@@ -288,7 +281,7 @@ export default function Pointage360LandingPage() {
               ))}
             </div>
           </div>
-          <ProductImage src="/images/pointage360/pointage360-gps-field.png" alt="Pointage GPS sur site" />
+          <ProductImage src="/images/pointage360/pointage360-timesheet-grid.png" alt="Suivi des heures sur site" />
         </div>
       </section>
 
@@ -347,10 +340,10 @@ export default function Pointage360LandingPage() {
               Transformer les donnees terrain en exports RH exploitables.
             </h2>
             <p className="mt-5 text-base leading-7 text-mutedText">
-              Pointage360 consolide les heures, les anomalies GPS, les absences et les validations pour produire des exports fiables.
+              Pointage360 consolide les heures, les absences et les validations pour produire des exports fiables.
             </p>
             <div className="mt-7 grid gap-3">
-              {['Exports Excel', 'Heures par site et par employe', 'Anomalies GPS et donnees de paie'].map((item) => (
+              {['Exports Excel', 'Heures par site et par employe', 'Données prêtes pour la paie'].map((item) => (
                 <div key={item} className="flex items-center gap-3 text-sm text-bodyText">
                   <BarChart3 className="h-4 w-4 text-accent" />
                   <span>{item}</span>

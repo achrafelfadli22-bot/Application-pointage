@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
-import { Prisma, SiteStatus, UserRole, UserStatus } from '@prisma/client';
+import { Prisma, UserRole, UserStatus } from '@prisma/client';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { HierarchyService } from '../common/hierarchy.service';
 import { CurrentUserContext } from '../common/types';
@@ -16,19 +16,33 @@ export class SitesService {
     private readonly hierarchy: HierarchyService,
   ) {}
 
-  findAll(user: CurrentUserContext, filters: { search?: string; status?: SiteStatus }) {
+  findAll(user: CurrentUserContext, filters: { search?: string; userId?: string }) {
     return this.repository.findMany({
       where: {
         ...this.tenantFilter(user, true),
         deletedAt: null,
-        status: filters.status,
         OR: filters.search
           ? [
               { code: { contains: filters.search, mode: 'insensitive' } },
               { name: { contains: filters.search, mode: 'insensitive' } },
-              { clientName: { contains: filters.search, mode: 'insensitive' } },
-              { city: { contains: filters.search, mode: 'insensitive' } },
+              { address: { contains: filters.search, mode: 'insensitive' } },
             ]
+          : undefined,
+        AND: filters.userId
+          ? [{
+              OR: [
+                {
+                  assignments: {
+                    some: {
+                      userId: filters.userId,
+                      ...this.hierarchy.activeAssignmentWhere(),
+                    },
+                  },
+                },
+                { managerId: filters.userId },
+                { project: { projectManagerId: filters.userId } },
+              ],
+            }]
           : undefined,
       },
       include: {
@@ -82,6 +96,7 @@ export class SitesService {
     if (dto.projectId) {
       await this.assertProject(user.tenantId, dto.projectId);
     }
+    await this.assertActiveEmployee(user.tenantId, dto.managerId);
 
     const site = await this.repository.create({
       data: {
@@ -89,18 +104,8 @@ export class SitesService {
         projectId: dto.projectId,
         code: dto.code,
         name: dto.name,
-        clientName: dto.clientName,
         address: dto.address,
-        city: dto.city,
-        country: dto.country,
-        managerId: undefined,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
-        status: dto.status,
-        progressPercent: dto.progressPercent,
-        latitude: dto.latitude,
-        longitude: dto.longitude,
-        gpsRadiusMeters: dto.gpsRadiusMeters,
+        managerId: dto.managerId,
       },
     });
 
@@ -118,31 +123,20 @@ export class SitesService {
 
   async update(user: CurrentUserContext, id: string, dto: UpdateSiteDto) {
     const existing = await this.assertSite(user, id);
-    if (dto.projectId) {
+    if (user.role === UserRole.HR && dto.projectId) {
       await this.assertProject(existing.tenantId, dto.projectId);
     }
+    if (dto.managerId) await this.assertActiveEmployee(existing.tenantId, dto.managerId);
 
     const site = await this.repository.update({
       where: { id },
-      data:
-        user.role === UserRole.RESOURCE_MANAGER
-          ? { managerId: dto.managerId }
-          : {
-              projectId: dto.projectId,
-              code: dto.code,
-              name: dto.name,
-              clientName: dto.clientName,
-              address: dto.address,
-              city: dto.city,
-              country: dto.country,
-              startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-              plannedEndDate: dto.plannedEndDate ? new Date(dto.plannedEndDate) : undefined,
-              status: dto.status,
-              progressPercent: dto.progressPercent,
-              latitude: dto.latitude,
-              longitude: dto.longitude,
-              gpsRadiusMeters: dto.gpsRadiusMeters,
-            },
+      data: {
+        managerId: dto.managerId === undefined ? undefined : dto.managerId || null,
+        projectId: dto.projectId,
+        code: dto.code,
+        name: dto.name,
+        address: dto.address,
+      },
     });
 
     await this.auditLog.log({
@@ -160,7 +154,7 @@ export class SitesService {
     await this.assertSite(user, id);
     return this.repository.update({
       where: { id },
-      data: { deletedAt: new Date(), status: SiteStatus.SUSPENDED },
+      data: { deletedAt: new Date() },
     });
   }
 
@@ -258,12 +252,25 @@ export class SitesService {
     });
   }
 
-  private tenantFilter(user: CurrentUserContext, includeOwnAssignments = false): Prisma.SiteWhereInput {
-    if (user.role === UserRole.SUPER_ADMIN) {
-      return {};
+  private async assertActiveEmployee(tenantId: string, userId: string) {
+    const employee = await this.repository.findActiveEmployee({
+      where: {
+        tenantId,
+        userId,
+        status: 'ACTIVE',
+        user: { deletedAt: null, status: UserStatus.ACTIVE },
+      },
+    });
+    if (!employee) {
+      throw new BadRequestException('Le chef de site doit être un employé actif.');
     }
+  }
+
+  private tenantFilter(user: CurrentUserContext, includeOwnAssignments = false): Prisma.SiteWhereInput {
+    if (user.role === UserRole.SUPER_ADMIN) return {};
 
     const tenantId = user.tenantId ?? '__missing__';
+    if (user.role === UserRole.RESOURCE_MANAGER || user.role === UserRole.HR) return { tenantId };
     const ownAssignedSitesScope: Prisma.SiteWhereInput = {
       OR: [
         {
@@ -278,20 +285,11 @@ export class SitesService {
       ],
     };
 
-    if (user.role === UserRole.PROJECT_MANAGER) {
-      return includeOwnAssignments
-        ? { tenantId, OR: [{ project: { projectManagerId: user.userId } }, ownAssignedSitesScope] }
-        : { tenantId, project: { projectManagerId: user.userId } };
-    }
-    if (user.role === UserRole.MANAGER) {
-      return includeOwnAssignments
-        ? { tenantId, OR: [{ managerId: user.userId }, ownAssignedSitesScope] }
-        : { tenantId, managerId: user.userId };
-    }
-    if (user.role === UserRole.EMPLOYEE) {
-      return { tenantId, ...ownAssignedSitesScope };
-    }
-
-    return { tenantId };
+    const operationalScope: Prisma.SiteWhereInput[] = [
+      { project: { projectManagerId: user.userId } },
+      { managerId: user.userId },
+    ];
+    if (includeOwnAssignments) operationalScope.push(ownAssignedSitesScope);
+    return { tenantId, OR: operationalScope };
   }
 }

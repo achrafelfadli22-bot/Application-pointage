@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/layout/page-header';
 import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
 import { DateField, FormField, SelectField } from '@/components/ui/form-fields';
 import { StatusBadge } from '@/components/ui/status-badge';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { api, tokenStore } from '@/lib/api-client';
 import {
   DEFAULT_TIMESHEET_TASK_TYPES,
@@ -73,7 +74,7 @@ const demoLeaveTypes: LeaveType[] = [
 
 // ─── Tab bar ──────────────────────────────────────────────────────────────────
 
-const TABS = ['Societe', 'Jours feries', 'Types de congés', 'Types timesheet', 'Sites', 'Pointage'] as const;
+const TABS = ['Societe', 'Jours feries', 'Types de congés', 'Types timesheet', 'Sites'] as const;
 type Tab = (typeof TABS)[number];
 
 function TabBar({ active, onChange }: { active: Tab; onChange: (t: Tab) => void }) {
@@ -243,12 +244,11 @@ function HolidaysTab() {
   }
 
   async function handleDelete(id: string) {
-    if (!confirm('Supprimer ce jour férié ?')) return;
     try {
       await api.deleteHoliday(id);
       setHolidays((prev) => prev.filter((h) => h.id !== id));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Erreur');
+      setError(e instanceof Error ? e.message : 'Erreur');
     }
   }
 
@@ -343,14 +343,13 @@ function HolidaysTab() {
                     >
                       <Pencil className="h-4 w-4" />
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(h.id)}
-                      className="text-dangerText hover:opacity-70"
-                      title="Supprimer"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <ConfirmDialog
+                      title="Supprimer le jour férié"
+                      description={`Le jour férié « ${h.name} » sera supprimé définitivement.`}
+                      confirmLabel="Supprimer"
+                      onConfirm={() => handleDelete(h.id)}
+                      trigger={<button type="button" className="text-dangerText hover:opacity-70" title="Supprimer"><Trash2 className="h-4 w-4" /></button>}
+                    />
                   </td>
                 </tr>
               ))}
@@ -599,27 +598,8 @@ const emptyTimesheetTaskType: TimesheetTaskTypeForm = {
   isActive: true,
 };
 
-const defaultSiteRoleOptions = [
-  'Chef de site',
-  'Chef d equipe',
-  'Technicien',
-  'Electricien',
-  'Aide electricien',
-  'Controle qualite',
-  'HSE',
-  'Administratif site',
-];
-
-const defaultJobTitleOptions = [
-  'Ressource Manager',
-  'Chef de projet',
-  'Chef de site',
-  'Ingenieur d etude',
-  'Technicien d etude',
-  'Technicien',
-  'Electricien',
-  'Administratif',
-];
+const defaultSiteRoleOptions: string[] = [];
+const defaultJobTitleOptions: string[] = [];
 
 const optionImportHeaders: Record<OptionImportKind, string[]> = {
   client: ['client', 'maitre ouvrage', 'maitre d ouvrage', 'maitre_ouvrage', 'donneur ordre'],
@@ -746,7 +726,7 @@ function downloadExcelTemplate(filename: string, sheetName: string, rows: Record
 }
 
 function TimesheetTaskTypesTab() {
-  const canEdit = tokenStore.session?.role === 'RESOURCE_MANAGER';
+  const canEdit = tokenStore.session?.role === 'HR';
   const [types, setTypes] = useState<TimesheetTaskType[]>(DEFAULT_TIMESHEET_TASK_TYPES);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -791,9 +771,9 @@ function TimesheetTaskTypesTab() {
     setNotice(null);
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!canEdit) {
-      setError('Seul le Ressource Manager peut modifier les types timesheet.');
+      setError('Seul le RH peut modifier les types de feuille de temps.');
       return;
     }
 
@@ -812,18 +792,41 @@ function TimesheetTaskTypesTab() {
     }
 
     const nextType: TimesheetTaskType = { value, label, isActive: form.isActive };
-    setTypes((previous) =>
+    const nextTypes =
       editingIndex === null
-        ? [...previous, nextType]
-        : previous.map((taskType, index) => (index === editingIndex ? nextType : taskType)),
-    );
-    closeForm();
+        ? [...types, nextType]
+        : types.map((taskType, index) => (index === editingIndex ? nextType : taskType));
+
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.updateSettingsTimesheetTaskTypes({ types: nextTypes });
+      setTypes(updated as TimesheetTaskType[]);
+      setSuccess(true);
+      closeForm();
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Enregistrement du type impossible.');
+    } finally {
+      setSaving(false);
+    }
   }
 
-  function handleDelete(indexToDelete: number) {
+  async function handleDelete(indexToDelete: number) {
     if (!canEdit) return;
-    if (!confirm('Supprimer ce type timesheet ? Les anciennes lignes garderont leur code historique.')) return;
-    setTypes((previous) => previous.filter((_, index) => index !== indexToDelete));
+    const nextTypes = types.filter((_, index) => index !== indexToDelete);
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await api.updateSettingsTimesheetTaskTypes({ types: nextTypes });
+      setTypes(updated as TimesheetTaskType[]);
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 3000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Suppression du type impossible.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleImportTaskTypes(file: File | null) {
@@ -850,15 +853,13 @@ function TimesheetTaskTypesTab() {
 
   function downloadTaskTypeTemplate() {
     downloadExcelTemplate('modele-types-tache-timesheet.xlsx', 'Types tache', [
-      { Code: 'EXECUTION', Libelle: 'Execution travaux', Statut: 'Actif' },
-      { Code: 'PREPARATION', Libelle: 'Preparation', Statut: 'Actif' },
-      { Code: 'REUNION_SITE', Libelle: 'Reunion site', Statut: 'Actif' },
+      { Code: '', Libelle: '', Statut: 'Actif' },
     ]);
   }
 
   async function handleSave() {
     if (!canEdit) {
-      setError('Seul le Ressource Manager peut enregistrer ces parametres.');
+      setError('Seul le RH peut enregistrer ces paramètres.');
       return;
     }
 
@@ -929,7 +930,7 @@ function TimesheetTaskTypesTab() {
 
       {!canEdit && (
         <div className="border border-borderSoft bg-grayCard px-4 py-3 text-sm text-mutedText">
-          Liste en lecture seule. La modification est reservee au Ressource Manager.
+          Liste en lecture seule. La modification est réservée au RH.
         </div>
       )}
 
@@ -989,7 +990,7 @@ function TimesheetTaskTypesTab() {
             />
             <FormField
               label="Libelle"
-              placeholder="ex: Execution travaux"
+              placeholder="Libellé du type de tâche"
               value={form.label}
               onChange={(e) => setForm((p) => ({ ...p, label: e.target.value }))}
             />
@@ -1004,9 +1005,9 @@ function TimesheetTaskTypesTab() {
           </div>
           {error && <p className="mt-2 text-sm text-dangerText">{error}</p>}
           <div className="mt-3 flex gap-2">
-            <PrimaryButton type="button" onClick={handleSubmit}>
+            <PrimaryButton type="button" onClick={() => void handleSubmit()} disabled={saving}>
               <Save className="h-4 w-4" />
-              Valider
+              {saving ? 'Enregistrement...' : 'Enregistrer le type'}
             </PrimaryButton>
             <SecondaryButton type="button" onClick={closeForm}>
               Annuler
@@ -1046,14 +1047,13 @@ function TimesheetTaskTypesTab() {
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
-                      <button
-                        type="button"
-                        onClick={() => handleDelete(index)}
-                        className="text-dangerText hover:opacity-70"
-                        title="Supprimer"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      <ConfirmDialog
+                        title="Supprimer le type de feuille de temps"
+                        description="Le type sera retiré de la configuration. Les anciennes lignes conserveront leur code historique."
+                        confirmLabel="Supprimer"
+                        onConfirm={() => handleDelete(index)}
+                        trigger={<button type="button" className="text-dangerText hover:opacity-70" title="Supprimer"><Trash2 className="h-4 w-4" /></button>}
+                      />
                     </td>
                   )}
                 </tr>
@@ -1080,7 +1080,7 @@ function TimesheetTaskTypesTab() {
 }
 
 function SiteOptionsTab() {
-  const canEdit = tokenStore.session?.role === 'RESOURCE_MANAGER';
+  const canEdit = tokenStore.session?.role === 'HR';
   const [siteRoleOptions, setSiteRoleOptions] = useState<string[]>(defaultSiteRoleOptions);
   const [clientOptions, setClientOptions] = useState<string[]>([]);
   const [jobTitleOptions, setJobTitleOptions] = useState<string[]>(defaultJobTitleOptions);
@@ -1147,7 +1147,7 @@ function SiteOptionsTab() {
 
   async function handleSave() {
     if (!canEdit) {
-      setError('Seul le Ressource Manager peut enregistrer ces parametres.');
+      setError('Seul le RH peut enregistrer ces paramètres.');
       return;
     }
 
@@ -1226,17 +1226,13 @@ function SiteOptionsTab() {
 
     if (kind === 'siteRole') {
       downloadExcelTemplate('modele-postes-site.xlsx', 'Postes site', [
-        { 'Poste site': 'Chef de site' },
-        { 'Poste site': 'Chef d equipe' },
-        { 'Poste site': 'Technicien' },
+        { 'Poste site': '' },
       ]);
       return;
     }
 
     downloadExcelTemplate('modele-postes-employes.xlsx', 'Postes employes', [
-      { Poste: 'Ressource Manager' },
-      { Poste: 'Chef de projet' },
-      { Poste: 'Technicien' },
+      { Poste: '' },
     ]);
   }
 
@@ -1342,7 +1338,7 @@ function SiteOptionsTab() {
     <div className="grid gap-4 py-6">
       {!canEdit && (
         <div className="border border-borderSoft bg-grayCard px-4 py-3 text-sm text-mutedText">
-          Liste en lecture seule. La modification est reservee au Ressource Manager.
+          Liste en lecture seule. La modification est réservée au RH.
         </div>
       )}
 
@@ -1368,14 +1364,12 @@ function SiteOptionsTab() {
 type AttendanceSettings = {
   workDayStartTime: string;       // "HH:MM"
   lateToleranceMinutes: number;
-  gpsToleranceMeters: number;
   overtimeTriggerHours: number;
 };
 
 const demoAttendanceSettings: AttendanceSettings = {
   workDayStartTime: '08:00',
   lateToleranceMinutes: 15,
-  gpsToleranceMeters: 200,
   overtimeTriggerHours: 9,
 };
 
@@ -1451,24 +1445,6 @@ function AttendanceSettingsTab() {
           </div>
         </label>
 
-        {/* Tolérance GPS */}
-        <label className="grid gap-1">
-          <span className="text-sm font-semibold text-bodyText">Tolérance GPS par défaut (mètres)</span>
-          <span className="text-xs text-mutedText">Rayon maximal autorisé depuis l'emplacement du site.</span>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min={0}
-              max={5000}
-              step={50}
-              value={form.gpsToleranceMeters}
-              onChange={(e) => setForm((p) => ({ ...p, gpsToleranceMeters: Number(e.target.value) }))}
-              className="h-10 w-28 rounded-md border border-borderSoft bg-surface px-3 text-sm text-bodyText outline-none focus:border-accent"
-            />
-            <span className="text-sm text-mutedText">m</span>
-          </div>
-        </label>
-
         {/* Heures supplémentaires */}
         <label className="grid gap-1">
           <span className="text-sm font-semibold text-bodyText">Heures sup. déclenchées à partir de (h/jour)</span>
@@ -1492,8 +1468,7 @@ function AttendanceSettingsTab() {
       <div className="rounded-lg border border-borderSoft bg-grayCard px-4 py-3 text-xs text-mutedText">
         <span className="font-semibold text-bodyText">Résumé actuel : </span>
         Début à <strong>{form.workDayStartTime}</strong>, retard toléré{' '}
-        <strong>{form.lateToleranceMinutes} min</strong>, GPS{' '}
-        <strong>{form.gpsToleranceMeters} m</strong>, heures sup. dès{' '}
+        <strong>{form.lateToleranceMinutes} min</strong>, heures sup. dès{' '}
         <strong>{form.overtimeTriggerHours} h/j</strong>.
       </div>
 
@@ -1519,7 +1494,7 @@ export default function SettingsPage() {
       <div className="grid gap-6">
         <PageHeader
           title="Paramètres"
-          description="Paramétrage tenant, jours fériés, types de congés, types timesheet, sites et règles de pointage."
+          description="Paramétrage tenant, jours fériés, types de congés, types timesheet et sites."
         />
         <div className="border border-borderSoft bg-surface shadow-card">
           <TabBar active={tab} onChange={setTab} />
@@ -1529,7 +1504,6 @@ export default function SettingsPage() {
             {tab === 'Types de congés' && <LeaveTypesTab />}
             {tab === 'Types timesheet' && <TimesheetTaskTypesTab />}
             {tab === 'Sites' && <SiteOptionsTab />}
-            {tab === 'Pointage' && <AttendanceSettingsTab />}
           </div>
         </div>
       </div>

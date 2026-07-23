@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { WorkLocation } from '@prisma/client';
-import { IsEnum, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsEnum, IsOptional, IsString } from 'class-validator';
 
 export class CheckInDto {
   @ApiPropertyOptional()
@@ -11,16 +11,6 @@ export class CheckInDto {
   @ApiProperty({ enum: WorkLocation })
   @IsEnum(WorkLocation)
   workLocation!: WorkLocation;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  latitude?: number;
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsNumber()
-  longitude?: number;
 
   @ApiPropertyOptional()
   @IsOptional()

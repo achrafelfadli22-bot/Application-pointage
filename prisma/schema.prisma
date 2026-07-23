@@ -34,12 +34,6 @@ enum EmployeeStatus {
   SUSPENDED
 }
 
-enum SiteStatus {
-  ACTIVE
-  COMPLETED
-  SUSPENDED
-}
-
 enum ProjectStatus {
   ACTIVE
   COMPLETED
@@ -82,6 +76,11 @@ enum TimesheetLineStatus {
 enum BillingType {
   BILLABLE
   NON_BILLABLE
+}
+
+enum PlanningStatus {
+  DRAFT
+  PUBLISHED
 }
 
 enum LeaveRequestStatus {
@@ -143,6 +142,9 @@ model Tenant {
   timesheets       Timesheet[]
   timesheetLines   TimesheetLine[]
   timesheetEntries TimesheetDayEntry[]
+  plannings        Planning[]
+  planningLines    PlanningLine[]
+  planningEntries  PlanningDayEntry[]
   leaveTypes       LeaveType[]
   leaveBalances    LeaveBalance[]
   leaveRequests    LeaveRequest[]
@@ -182,6 +184,8 @@ model User {
   attendancePunches AttendancePunch[] @relation("AttendanceUser")
   approvedAttendancePunches AttendancePunch[] @relation("AttendanceApprover")
   timesheets Timesheet[] @relation("TimesheetUser")
+  createdPlannings Planning[] @relation("PlanningCreator")
+  plannedLines PlanningLine[] @relation("PlannedUser")
   approvedTimesheets Timesheet[] @relation("TimesheetApprover")
   rejectedTimesheets Timesheet[] @relation("TimesheetRejecter")
   leaveBalances LeaveBalance[]
@@ -253,18 +257,8 @@ model Site {
   projectId       String?
   code            String
   name            String
-  clientName      String
   address         String?
-  city            String?
-  country         String?
   managerId       String?
-  startDate       DateTime?  @db.Date
-  plannedEndDate  DateTime?  @db.Date
-  status          SiteStatus @default(ACTIVE)
-  progressPercent Int        @default(0)
-  latitude        Decimal?   @db.Decimal(10, 7)
-  longitude       Decimal?   @db.Decimal(10, 7)
-  gpsRadiusMeters Int        @default(150)
   createdAt       DateTime   @default(now())
   updatedAt       DateTime   @updatedAt
   deletedAt       DateTime?
@@ -276,12 +270,12 @@ model Site {
   assignments SiteAssignment[]
   attendancePunches AttendancePunch[]
   timesheetLines TimesheetLine[]
+  planningLines PlanningLine[]
 
   @@unique([tenantId, code])
   @@index([tenantId])
   @@index([projectId])
   @@index([managerId])
-  @@index([status])
 }
 
 model SiteAssignment {
@@ -316,11 +310,6 @@ model AttendancePunch {
   checkOutAt        DateTime?
   durationMinutes   Int?
   workLocation      WorkLocation     @default(SITE)
-  checkInLatitude   Decimal?         @db.Decimal(10, 7)
-  checkInLongitude  Decimal?         @db.Decimal(10, 7)
-  checkOutLatitude  Decimal?         @db.Decimal(10, 7)
-  checkOutLongitude Decimal?         @db.Decimal(10, 7)
-  isGpsAnomaly      Boolean          @default(false)
   employeeComment   String?
   managerComment    String?
   status            AttendanceStatus @default(DRAFT)
@@ -419,6 +408,71 @@ model TimesheetDayEntry {
   @@unique([tenantId, timesheetLineId, entryDate])
   @@index([tenantId])
   @@index([timesheetLineId])
+  @@index([entryDate])
+}
+
+model Planning {
+  id          String         @id @default(cuid())
+  tenantId    String
+  createdById String
+  periodStart DateTime       @db.Date
+  periodEnd   DateTime       @db.Date
+  status      PlanningStatus @default(DRAFT)
+  publishedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  tenant    Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  createdBy User           @relation("PlanningCreator", fields: [createdById], references: [id], onDelete: Cascade)
+  lines     PlanningLine[]
+
+  @@unique([tenantId, createdById, periodStart, periodEnd])
+  @@index([tenantId])
+  @@index([createdById])
+  @@index([status])
+  @@index([periodStart])
+  @@index([periodEnd])
+}
+
+model PlanningLine {
+  id         String   @id @default(cuid())
+  tenantId   String
+  planningId String
+  userId     String
+  siteId     String
+  taskName   String
+  activity   String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planning Planning           @relation(fields: [planningId], references: [id], onDelete: Cascade)
+  user     User               @relation("PlannedUser", fields: [userId], references: [id], onDelete: Cascade)
+  site     Site               @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  entries  PlanningDayEntry[]
+
+  @@index([tenantId])
+  @@index([planningId])
+  @@index([userId])
+  @@index([siteId])
+}
+
+model PlanningDayEntry {
+  id             String   @id @default(cuid())
+  tenantId       String
+  planningLineId String
+  entryDate      DateTime @db.Date
+  hours          Decimal  @default(0) @db.Decimal(5, 2)
+  comment        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  planningLine PlanningLine @relation(fields: [planningLineId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, planningLineId, entryDate])
+  @@index([tenantId])
+  @@index([planningLineId])
   @@index([entryDate])
 }
 
@@ -584,7 +638,6 @@ model TenantSettings {
   tenantId             String   @unique
   workDayStartTime     String   @default("08:00")
   lateToleranceMinutes Int      @default(15)
-  gpsToleranceMeters   Int      @default(150)
   overtimeTriggerHours Int      @default(8)
   timesheetPeriodDays  Int      @default(7)
   timesheetTaskTypes   Json     @default("[]")

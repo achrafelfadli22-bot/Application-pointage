@@ -1,16 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { ColumnDef } from '@tanstack/react-table';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { SummaryCounters } from '@/components/ui/cards';
 import { DataTable } from '@/components/ui/data-table';
 import { StatusBadge } from '@/components/ui/status-badge';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
 import { DateField, SelectField } from '@/components/ui/form-fields';
 import { ErrorState } from '@/components/ui/states';
@@ -171,19 +169,17 @@ function NewTimesheetModal({ onCreated }: { onCreated: () => void }) {
 export default function TimesheetsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<TimesheetStatusFilter>('ALL');
-  const { data, error: loadError, refresh } = useApiData<Timesheet[]>(() => api.timesheets() as Promise<Timesheet[]>, demoTimesheets);
+  const { data, error: loadError, refresh } = useApiData<Timesheet[]>(
+    () => api.timesheets() as Promise<Timesheet[]>,
+    [],
+    { fallbackMode: 'never' },
+  );
 
   // Timesheets validees par N+1/N+2 ou HR.
   const myRole    = tokenStore.session?.role ?? '';
-  const myUserId  = tokenStore.session?.user?.id ?? '';
   // HR est en lecture seule — ne peut pas créer de timesheet
   const canCreate = ['RESOURCE_MANAGER', 'PROJECT_MANAGER', 'MANAGER', 'EMPLOYEE'].includes(myRole);
 
-
-  async function handleDelete(id: string) {
-    try { await api.deleteTimesheet(id); refresh(); }
-    catch (e) { setActionError(e instanceof Error ? e.message : 'Erreur'); }
-  }
 
   const filteredData = statusFilter === 'ALL' ? data : data.filter((timesheet) => timesheet.status === statusFilter);
 
@@ -193,29 +189,6 @@ export default function TimesheetsPage() {
     { header: 'Statut',      cell: ({ row }) => <StatusBadge status={row.original.status} /> },
     { header: 'Soumis le',   cell: ({ row }) => row.original.submittedAt ? new Date(row.original.submittedAt).toLocaleDateString('fr-FR') : '—' },
     { header: 'Approuvé le', cell: ({ row }) => row.original.approvedAt ? new Date(row.original.approvedAt).toLocaleDateString('fr-FR') : '—' },
-    {
-      header: 'Actions',
-      cell: ({ row }) => (
-        <div className="flex items-center gap-2">
-          <Link href={`/timesheets/${row.original.id}`} className="text-sm font-medium text-accent hover:underline">
-            Ouvrir
-          </Link>
-          {row.original.status === 'DRAFT' && row.original.user.id === myUserId && (
-            <ConfirmDialog
-              title="Supprimer la feuille de temps"
-              description="Cette feuille de temps en brouillon sera supprimee definitivement."
-              confirmLabel="Supprimer"
-              onConfirm={() => handleDelete(row.original.id)}
-              trigger={
-                <button type="button" title="Supprimer" className="flex h-7 w-7 items-center justify-center rounded-md text-dangerText hover:bg-dangerBg">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              }
-            />
-          )}
-        </div>
-      ),
-    },
   ];
 
   return (
@@ -245,7 +218,7 @@ export default function TimesheetsPage() {
           ]}
         />
 
-        <DataTable columns={columns} data={filteredData} />
+        <DataTable columns={columns} data={filteredData} getRowHref={(timesheet) => `/timesheets/${timesheet.id}`} />
       </div>
     </AppShell>
   );

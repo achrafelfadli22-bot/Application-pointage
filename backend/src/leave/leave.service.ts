@@ -39,10 +39,15 @@ export class LeaveService {
     });
   }
 
-  async findRequests(user: CurrentUserContext, status?: LeaveRequestStatus) {
-    return this.prisma.leaveRequest.findMany({
+  async findRequests(user: CurrentUserContext, status?: LeaveRequestStatus, view?: 'mine' | 'managed') {
+    const requestScope: Prisma.LeaveRequestWhereInput = view === 'mine'
+      ? { tenantId: user.tenantId ?? '__missing__', userId: user.userId }
+      : view === 'managed'
+        ? { AND: [await this.scope(user), { userId: { not: user.userId } }] }
+        : await this.scope(user);
+    const requests = await this.prisma.leaveRequest.findMany({
       where: {
-        ...(await this.scope(user)),
+        ...requestScope,
         status,
       },
       include: {
@@ -53,6 +58,18 @@ export class LeaveService {
       orderBy: { createdAt: 'desc' },
       take: 150,
     });
+    return Promise.all(requests.map(async (request) => ({
+      ...request,
+      attachmentUrl: request.attachmentKey
+        ? await this.storage.presignedGetObject(request.attachmentKey, 15 * 60)
+        : null,
+      approvalPermissions: {
+        canApproveReject:
+          (request.status === LeaveRequestStatus.SUBMITTED &&
+            await this.hierarchy.isProjectManagerForUser(request.tenantId, request.userId, user.userId)) ||
+          (request.status === LeaveRequestStatus.N1_APPROVED && user.role === UserRole.RESOURCE_MANAGER),
+      },
+    })));
   }
 
   async createRequest(user: CurrentUserContext, dto: CreateLeaveRequestDto) {
@@ -194,7 +211,7 @@ export class LeaveService {
     const updated = await this.prisma.$transaction(async (tx) => {
       await this.applyBalanceTransition(tx, request, effectiveStatus);
 
-      return tx.leaveRequest.update({
+      const updatedRequest = await tx.leaveRequest.update({
         where: { id },
         data: {
           status: effectiveStatus,
@@ -207,6 +224,18 @@ export class LeaveService {
         },
         include: { leaveType: true, user: true },
       });
+
+      if (effectiveStatus === LeaveRequestStatus.APPROVED) {
+        await tx.planningDayEntry.updateMany({
+          where: {
+            tenantId: request.tenantId,
+            entryDate: { gte: request.startDate, lte: request.endDate },
+            planningLine: { userId: request.userId },
+          },
+          data: { hours: 0 },
+        });
+      }
+      return updatedRequest;
     });
 
     await this.prisma.approvalAction.create({
@@ -394,32 +423,32 @@ export class LeaveService {
       return requestedStatus;
     }
 
-    const level = await this.hierarchy.approvalLevelFor(user, request.tenantId, request.userId);
-    if (!level) {
-      throw new ForbiddenException('Only N+1, N+2, HR, or resource manager can validate this leave request');
-    }
+    const isAssignedProjectManager = request.status === LeaveRequestStatus.SUBMITTED &&
+      await this.hierarchy.isProjectManagerForUser(request.tenantId, request.userId, user.userId);
 
     if (requestedStatus === LeaveRequestStatus.REJECTED) {
+      const canReject =
+        isAssignedProjectManager ||
+        (user.role === UserRole.RESOURCE_MANAGER && request.status === LeaveRequestStatus.N1_APPROVED);
+      if (!canReject) {
+        throw new ForbiddenException("Vous ne pouvez pas refuser cette demande à cette étape.");
+      }
       return LeaveRequestStatus.REJECTED;
     }
 
-    if (level === 'ADMIN' || level === 'BOTH') {
-      return LeaveRequestStatus.APPROVED;
-    }
-
-    if (request.status === LeaveRequestStatus.SUBMITTED && level === 'N1') {
+    if (isAssignedProjectManager) {
       return LeaveRequestStatus.N1_APPROVED;
     }
 
-    if (request.status === LeaveRequestStatus.N1_APPROVED && level === 'N2') {
+    if (user.role === UserRole.RESOURCE_MANAGER && request.status === LeaveRequestStatus.N1_APPROVED) {
       return LeaveRequestStatus.APPROVED;
     }
 
-    if (request.status === LeaveRequestStatus.SUBMITTED && level === 'N2') {
-      throw new BadRequestException('N+1 approval is required before N+2 approval');
+    if (user.role === UserRole.RESOURCE_MANAGER && request.status === LeaveRequestStatus.SUBMITTED) {
+      throw new BadRequestException("L'approbation du chef de projet est requise avant celle du Resource Manager.");
     }
 
-    throw new BadRequestException('This leave request is not waiting for your approval level');
+    throw new BadRequestException("Cette demande n'attend pas votre niveau d'approbation.");
   }
 
   private assertTransition(currentStatus: LeaveRequestStatus, nextStatus: LeaveRequestStatus) {
@@ -452,7 +481,22 @@ export class LeaveService {
 
     const tenantId = user.tenantId ?? '__missing__';
     const managedUserIds = await this.hierarchy.managedUserIds(user);
-    return managedUserIds ? { tenantId, userId: { in: managedUserIds } } : { tenantId };
+    return managedUserIds
+      ? { tenantId, userId: { in: [...new Set([user.userId, ...managedUserIds])] } }
+      : { tenantId };
+  }
+
+  async capabilities(user: CurrentUserContext) {
+    if (!user.tenantId) return { canAccessRequests: false, isProjectManager: false };
+    const managedProject = await this.prisma.project.findFirst({
+      where: { tenantId: user.tenantId, projectManagerId: user.userId, deletedAt: null },
+      select: { id: true },
+    });
+    const isProjectManager = Boolean(managedProject);
+    return {
+      isProjectManager,
+      canAccessRequests: isProjectManager || user.role === UserRole.RESOURCE_MANAGER || user.role === UserRole.HR,
+    };
   }
 
   private async scopedUserIdFilter(user: CurrentUserContext, requestedUserId?: string) {
@@ -460,9 +504,10 @@ export class LeaveService {
     if (!managedUserIds) {
       return requestedUserId;
     }
+    const allowedUserIds = [...new Set([user.userId, ...managedUserIds])];
     if (requestedUserId) {
-      return managedUserIds.includes(requestedUserId) ? requestedUserId : '__forbidden__';
+      return allowedUserIds.includes(requestedUserId) ? requestedUserId : '__forbidden__';
     }
-    return { in: managedUserIds };
+    return { in: allowedUserIds };
   }
 }

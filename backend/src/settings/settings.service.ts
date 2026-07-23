@@ -3,7 +3,6 @@ import { CurrentUserContext } from '../common/types';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateHolidayDto } from './dto/create-holiday.dto';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
-import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateHolidayDto } from './dto/update-holiday.dto';
 import { UpdateLeaveTypeDto } from './dto/update-leave-type.dto';
@@ -11,36 +10,9 @@ import { UpdateSiteOptionsDto } from './dto/update-site-options.dto';
 import { TimesheetPeriodType, UpdateTimesheetSettingsDto } from './dto/update-timesheet-settings.dto';
 import { UpdateTimesheetTaskTypesDto } from './dto/update-timesheet-task-types.dto';
 
-const DEFAULT_TIMESHEET_TASK_TYPES = [
-  { value: 'EXECUTION', label: 'Execution travaux', isActive: true },
-  { value: 'PREPARATION', label: 'Preparation', isActive: true },
-  { value: 'REUNION_SITE', label: 'Reunion site', isActive: true },
-  { value: 'CONTROLE_QUALITE', label: 'Controle qualite', isActive: true },
-  { value: 'ADMINISTRATIF', label: 'Administratif', isActive: true },
-  { value: 'AUTRE', label: 'Autre', isActive: true },
-];
-
-const DEFAULT_SITE_ROLE_OPTIONS = [
-  'Chef de site',
-  'Chef d equipe',
-  'Technicien',
-  'Electricien',
-  'Aide electricien',
-  'Controle qualite',
-  'HSE',
-  'Administratif site',
-];
-
-const DEFAULT_JOB_TITLE_OPTIONS = [
-  'Ressource Manager',
-  'Chef de projet',
-  'Chef de site',
-  'Ingenieur d etude',
-  'Technicien d etude',
-  'Technicien',
-  'Electricien',
-  'Administratif',
-];
+type TimesheetTaskTypeOption = { value: string; label: string; isActive: boolean };
+const EMPTY_OPTIONS: string[] = [];
+const EMPTY_TIMESHEET_TASK_TYPES: TimesheetTaskTypeOption[] = [];
 
 @Injectable()
 export class SettingsService {
@@ -124,7 +96,7 @@ export class SettingsService {
     const tenantId = this.requireTenant(user);
     const settings = await this.prisma.tenantSettings.upsert({
       where: { tenantId },
-      create: { tenantId, timesheetTaskTypes: DEFAULT_TIMESHEET_TASK_TYPES },
+      create: { tenantId, timesheetTaskTypes: EMPTY_TIMESHEET_TASK_TYPES },
       update: {},
     });
 
@@ -180,37 +152,25 @@ export class SettingsService {
     const tenantId = this.requireTenant(user);
     const settings = await this.prisma.tenantSettings.upsert({
       where: { tenantId },
-      create: { tenantId, siteRoleOptions: DEFAULT_SITE_ROLE_OPTIONS, jobTitleOptions: DEFAULT_JOB_TITLE_OPTIONS },
+      create: { tenantId, siteRoleOptions: EMPTY_OPTIONS, jobTitleOptions: EMPTY_OPTIONS },
       update: {},
     });
 
-    const [projects, sites, employees] = await Promise.all([
-      this.prisma.project.findMany({
-        where: { tenantId, deletedAt: null, clientName: { not: null } },
-        select: { clientName: true },
-      }),
-      this.prisma.site.findMany({
-        where: { tenantId, deletedAt: null },
-        select: { clientName: true },
-      }),
-      this.prisma.employeeProfile.findMany({
-        where: { tenantId, user: { deletedAt: null } },
-        select: { jobTitle: true },
-      }),
-    ]);
+    const projects = await this.prisma.project.findMany({
+      where: { tenantId, deletedAt: null, clientName: { not: null } },
+      select: { clientName: true },
+    });
 
     const existingClients = [
       ...projects.map((project) => project.clientName),
-      ...sites.map((site) => site.clientName),
     ].filter(Boolean) as string[];
     const configuredClients = this.normalizeStringOptions(settings.clientOptions, []);
-    const configuredJobTitles = this.normalizeStringOptions(settings.jobTitleOptions, DEFAULT_JOB_TITLE_OPTIONS);
-    const existingJobTitles = employees.map((employee) => employee.jobTitle).filter(Boolean);
+    const configuredJobTitles = this.normalizeStringOptions(settings.jobTitleOptions, EMPTY_OPTIONS);
 
     return {
-      siteRoleOptions: this.normalizeStringOptions(settings.siteRoleOptions, DEFAULT_SITE_ROLE_OPTIONS),
+      siteRoleOptions: this.normalizeStringOptions(settings.siteRoleOptions, EMPTY_OPTIONS),
       clientOptions: this.normalizeStringOptions([...configuredClients, ...existingClients], []),
-      jobTitleOptions: this.normalizeStringOptions([...configuredJobTitles, ...existingJobTitles], DEFAULT_JOB_TITLE_OPTIONS),
+      jobTitleOptions: configuredJobTitles,
     };
   }
 
@@ -218,21 +178,21 @@ export class SettingsService {
     const tenantId = this.requireTenant(user);
     const current = await this.prisma.tenantSettings.upsert({
       where: { tenantId },
-      create: { tenantId, siteRoleOptions: DEFAULT_SITE_ROLE_OPTIONS, jobTitleOptions: DEFAULT_JOB_TITLE_OPTIONS },
+      create: { tenantId, siteRoleOptions: EMPTY_OPTIONS, jobTitleOptions: EMPTY_OPTIONS },
       update: {},
     });
     const siteRoleOptions =
       dto.siteRoleOptions === undefined
-        ? this.normalizeStringOptions(current.siteRoleOptions, DEFAULT_SITE_ROLE_OPTIONS)
-        : this.normalizeStringOptions(dto.siteRoleOptions, DEFAULT_SITE_ROLE_OPTIONS, true, 'role sur site');
+        ? this.normalizeStringOptions(current.siteRoleOptions, EMPTY_OPTIONS)
+        : this.normalizeStringOptions(dto.siteRoleOptions, EMPTY_OPTIONS, true, 'role sur site');
     const clientOptions =
       dto.clientOptions === undefined
         ? this.normalizeStringOptions(current.clientOptions, [])
         : this.normalizeStringOptions(dto.clientOptions, []);
     const jobTitleOptions =
       dto.jobTitleOptions === undefined
-        ? this.normalizeStringOptions(current.jobTitleOptions, DEFAULT_JOB_TITLE_OPTIONS)
-        : this.normalizeStringOptions(dto.jobTitleOptions, DEFAULT_JOB_TITLE_OPTIONS, true, 'poste');
+        ? this.normalizeStringOptions(current.jobTitleOptions, EMPTY_OPTIONS)
+        : this.normalizeStringOptions(dto.jobTitleOptions, EMPTY_OPTIONS, true, 'poste');
 
     const settings = await this.prisma.tenantSettings.update({
       where: { tenantId },
@@ -244,40 +204,10 @@ export class SettingsService {
     });
 
     return {
-      siteRoleOptions: this.normalizeStringOptions(settings.siteRoleOptions, DEFAULT_SITE_ROLE_OPTIONS),
+      siteRoleOptions: this.normalizeStringOptions(settings.siteRoleOptions, EMPTY_OPTIONS),
       clientOptions: this.normalizeStringOptions(settings.clientOptions, []),
-      jobTitleOptions: this.normalizeStringOptions(settings.jobTitleOptions, DEFAULT_JOB_TITLE_OPTIONS),
+      jobTitleOptions: this.normalizeStringOptions(settings.jobTitleOptions, EMPTY_OPTIONS),
     };
-  }
-
-  async attendanceSettings(user: CurrentUserContext) {
-    const tenantId = this.requireTenant(user);
-    // upsert: return existing or default record
-    return this.prisma.tenantSettings.upsert({
-      where: { tenantId },
-      create: { tenantId },
-      update: {},
-    });
-  }
-
-  async updateAttendanceSettings(user: CurrentUserContext, dto: UpdateAttendanceDto) {
-    const tenantId = this.requireTenant(user);
-    return this.prisma.tenantSettings.upsert({
-      where: { tenantId },
-      create: {
-        tenantId,
-        workDayStartTime:     dto.workDayStartTime     ?? '08:00',
-        lateToleranceMinutes: dto.lateToleranceMinutes ?? 15,
-        gpsToleranceMeters:   dto.gpsToleranceMeters   ?? 150,
-        overtimeTriggerHours: dto.overtimeTriggerHours ?? 8,
-      },
-      update: {
-        ...(dto.workDayStartTime     !== undefined && { workDayStartTime:     dto.workDayStartTime }),
-        ...(dto.lateToleranceMinutes !== undefined && { lateToleranceMinutes: dto.lateToleranceMinutes }),
-        ...(dto.gpsToleranceMeters   !== undefined && { gpsToleranceMeters:   dto.gpsToleranceMeters }),
-        ...(dto.overtimeTriggerHours !== undefined && { overtimeTriggerHours: dto.overtimeTriggerHours }),
-      },
-    });
   }
 
   private requireTenant(user: CurrentUserContext) {
@@ -288,9 +218,9 @@ export class SettingsService {
   }
 
   private normalizeTimesheetTaskTypes(input: unknown, strict = false) {
-    const raw = Array.isArray(input) && input.length ? input : DEFAULT_TIMESHEET_TASK_TYPES;
+    const raw = Array.isArray(input) ? input : EMPTY_TIMESHEET_TASK_TYPES;
     const seen = new Set<string>();
-    const normalized: typeof DEFAULT_TIMESHEET_TASK_TYPES = [];
+    const normalized: TimesheetTaskTypeOption[] = [];
 
     for (const item of raw) {
       if (!item || typeof item !== 'object') {
@@ -322,7 +252,7 @@ export class SettingsService {
 
     if (!normalized.length) {
       if (strict) throw new BadRequestException('Au moins un type timesheet est requis.');
-      return DEFAULT_TIMESHEET_TASK_TYPES;
+      return EMPTY_TIMESHEET_TASK_TYPES;
     }
 
     return normalized;

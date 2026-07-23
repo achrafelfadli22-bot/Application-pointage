@@ -1,14 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { ColumnDef } from '@tanstack/react-table';
-import { Plus, Trash2, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import * as Dialog from '@radix-ui/react-dialog';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
 import { PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
-import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DataTable } from '@/components/ui/data-table';
 import { SelectField, FormField, DateField } from '@/components/ui/form-fields';
 import { StatusBadge } from '@/components/ui/status-badge';
@@ -17,7 +15,7 @@ import { ROLE_LABELS } from '@/lib/nav-items';
 import { useApiData } from '@/lib/use-api-data';
 import { CsvImportModal } from '@/components/domain/csv-import-modal';
 
-type TeamSite = { id: string; code: string; name: string; city?: string | null };
+type TeamSite = { id: string; code: string; name: string; address?: string | null };
 
 type Employee = {
   id: string;
@@ -41,22 +39,14 @@ type Employee = {
 
 type SiteOptions = { jobTitleOptions?: string[] };
 
-const fallbackJobTitleOptions = [
-  'Ressource Manager',
-  'Chef de projet',
-  'Chef de site',
-  'Ingenieur d etude',
-  'Technicien d etude',
-  'Technicien',
-  'Electricien',
-  'Administratif',
-];
+const fallbackJobTitleOptions: string[] = [];
 
 // ─── Modal Nouvel Employé ────────────────────────────────────────────────────
 
 const emptyForm = {
-  firstName: '', lastName: '', email: '',
+  firstName: '', lastName: '', email: '', password: '',
   phone: '', employeeNumber: '', jobTitle: '',
+  role: 'EMPLOYEE',
   contractType: 'CDI', hireDate: '', annualLeaveBalance: 18, hourlyRate: 85,
 };
 
@@ -87,10 +77,14 @@ function NewEmployeeModal({ jobTitleOptions, onCreated }: { jobTitleOptions: str
       setError('Champs obligatoires : prénom, nom, email, matricule, date d\'embauche.');
       return;
     }
+    if (form.password && form.password.length < 8) {
+      setError('Le mot de passe doit contenir au moins 8 caractères.');
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {
-      await api.createEmployee({ ...form, role: 'EMPLOYEE' } as unknown as Record<string, unknown>);
+      await api.createEmployee({ ...form, password: form.password || undefined } as unknown as Record<string, unknown>);
       setOpen(false);
       setForm(emptyForm);
       onCreated();
@@ -120,6 +114,7 @@ function NewEmployeeModal({ jobTitleOptions, onCreated }: { jobTitleOptions: str
               {f('firstName',      'Prénom')}
               {f('lastName',       'Nom')}
               {f('email',          'Email',   'email')}
+              {f('password',       'Mot de passe (optionnel)', 'password')}
               {f('phone',          'Téléphone')}
               {f('employeeNumber', 'Matricule')}
               <SelectField
@@ -133,6 +128,14 @@ function NewEmployeeModal({ jobTitleOptions, onCreated }: { jobTitleOptions: str
                     {option}
                   </option>
                 ))}
+              </SelectField>
+              <SelectField
+                label="Statut d'entreprise"
+                value={form.role}
+                onChange={(e) => setForm((p) => ({ ...p, role: e.target.value }))}
+              >
+                <option value="EMPLOYEE">Employé</option>
+                <option value="RESOURCE_MANAGER">Ressource Manager</option>
               </SelectField>
               <label className="grid gap-1">
                 <span className="text-sm font-semibold text-bodyText">Type de contrat</span>
@@ -203,7 +206,7 @@ export default function TeamPage() {
 
   const jobTitleOptions = Array.from(
     new Set(
-      [...(siteOptions.jobTitleOptions?.length ? siteOptions.jobTitleOptions : fallbackJobTitleOptions), ...data.map((employee) => employee.jobTitle)]
+      (siteOptions.jobTitleOptions?.length ? siteOptions.jobTitleOptions : fallbackJobTitleOptions)
         .map((option) => option.trim())
         .filter(Boolean),
     ),
@@ -217,16 +220,6 @@ export default function TeamPage() {
     return true;
   });
 
-  async function handleDelete(employee: Employee) {
-    setActionError(null);
-    try {
-      await api.deleteEmployee(employee.id);
-      refresh();
-    } catch (error) {
-      setActionError(error instanceof Error ? error.message : 'Suppression impossible.');
-    }
-  }
-
   const columns: ColumnDef<Employee, unknown>[] = [
     { header: 'Matricule',          accessorKey: 'employeeNumber' },
     { header: 'Nom complet',        cell: ({ row }) => `${row.original.user.firstName} ${row.original.user.lastName}` },
@@ -237,33 +230,6 @@ export default function TeamPage() {
     { header: 'Sites gérés',    cell: ({ row }) => managedSitesLabel(row.original) },
     { header: 'Statut',             cell: ({ row }) => <StatusBadge status={row.original.status} /> },
     { header: 'Solde congés',       cell: ({ row }) => `${row.original.annualLeaveBalance} j` },
-    {
-      header: 'Actions',
-      cell: ({ row }) => {
-        const canDelete = canManageEmployees && ['EMPLOYEE', 'MANAGER'].includes(row.original.user.role);
-
-        return (
-          <div className="flex items-center gap-2">
-            <Link href={`/team/${row.original.id}`} className="text-sm font-medium text-accent hover:underline">
-              Voir
-            </Link>
-            {canDelete && (
-              <ConfirmDialog
-                title="Supprimer la ressource"
-                description={`Supprimer ${row.original.user.firstName} ${row.original.user.lastName} ? Le compte sera desactive et retire des affectations actives.`}
-                confirmLabel="Supprimer"
-                onConfirm={() => handleDelete(row.original)}
-                trigger={
-                  <button type="button" title="Supprimer" className="flex h-7 w-7 items-center justify-center rounded-md text-dangerText hover:bg-dangerBg">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                }
-              />
-            )}
-          </div>
-        );
-      },
-    },
   ];
 
   return (
@@ -309,7 +275,7 @@ export default function TeamPage() {
           </SelectField>
         </div>
 
-        <DataTable columns={columns} data={filtered} />
+        <DataTable columns={columns} data={filtered} getRowHref={(employee) => `/team/${employee.id}`} />
       </div>
     </AppShell>
   );

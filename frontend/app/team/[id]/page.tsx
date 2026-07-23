@@ -36,7 +36,7 @@ type Employee = {
     role: string;
     status: string;
   };
-  mainSite?: { id: string; code: string; name: string; city?: string } | null;
+  mainSite?: { id: string; code: string; name: string; address?: string } | null;
 };
 
 type LeaveBalance = {
@@ -82,16 +82,7 @@ const emptyEmployee: Employee = {
   mainSite: null,
 };
 
-const fallbackJobTitleOptions = [
-  'Ressource Manager',
-  'Chef de projet',
-  'Chef de site',
-  'Ingenieur d etude',
-  'Technicien d etude',
-  'Technicien',
-  'Electricien',
-  'Administratif',
-];
+const fallbackJobTitleOptions: string[] = [];
 
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -106,12 +97,15 @@ function dateInput(value?: string | null) {
   return value ? value.slice(0, 10) : '';
 }
 
-function EditEmployeeModal({ employee, jobTitleOptions, onUpdated }: {
+function EditEmployeeModal({ employee, jobTitleOptions, editorRole, onUpdated }: {
   employee: Employee;
   jobTitleOptions: string[];
+  editorRole: string;
   onUpdated: () => void;
 }) {
-  const isHR = true;
+  const isHR = editorRole === 'HR';
+  const isResourceManager = editorRole === 'RESOURCE_MANAGER';
+  const hrCanChangeEnterpriseRole = isHR && ['EMPLOYEE', 'RESOURCE_MANAGER'].includes(employee.user.role);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     firstName: employee.user.firstName,
@@ -126,6 +120,7 @@ function EditEmployeeModal({ employee, jobTitleOptions, onUpdated }: {
     annualLeaveBalance: employee.annualLeaveBalance ?? 0,
     hourlyRate: employee.hourlyRate ?? '',
     status: employee.status,
+    role: employee.user.role,
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -145,6 +140,7 @@ function EditEmployeeModal({ employee, jobTitleOptions, onUpdated }: {
       annualLeaveBalance: employee.annualLeaveBalance ?? 0,
       hourlyRate: employee.hourlyRate ?? '',
       status: employee.status,
+      role: employee.user.role,
     });
     setError(null);
   }, [open, employee]);
@@ -162,7 +158,7 @@ function EditEmployeeModal({ employee, jobTitleOptions, onUpdated }: {
     setSubmitting(true);
     setError(null);
     try {
-      const payload: Record<string, unknown> = {
+      const payload: Record<string, unknown> = isHR ? {
             firstName: form.firstName,
             lastName: form.lastName,
             email: form.email,
@@ -174,7 +170,8 @@ function EditEmployeeModal({ employee, jobTitleOptions, onUpdated }: {
             annualLeaveBalance: Number(form.annualLeaveBalance),
             hourlyRate: form.hourlyRate === '' ? null : Number(form.hourlyRate),
             status: form.status,
-      };
+            ...(hrCanChangeEnterpriseRole && { role: form.role }),
+      } : { role: form.role };
       if (isHR && form.password) payload.password = form.password;
 
       await api.updateEmployee(employee.id, payload);
@@ -233,6 +230,22 @@ function EditEmployeeModal({ employee, jobTitleOptions, onUpdated }: {
                 <option value="INACTIVE">Inactif</option>
                 <option value="SUSPENDED">Suspendu</option>
               </SelectField>
+              <SelectField disabled={!isResourceManager && !hrCanChangeEnterpriseRole} label={isHR ? "Statut d'entreprise" : 'Rôle opérationnel'} value={form.role} onChange={(event) => patch('role', event.target.value)}>
+                {isHR && !hrCanChangeEnterpriseRole ? (
+                  <option value={form.role}>{ROLE_LABELS[form.role] ?? form.role}</option>
+                ) : isHR ? (
+                  <>
+                    <option value="EMPLOYEE">Employé</option>
+                    <option value="RESOURCE_MANAGER">Ressource Manager</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="EMPLOYEE">Employé</option>
+                    <option value="MANAGER">Chef de site</option>
+                    <option value="PROJECT_MANAGER">Chef de projet</option>
+                  </>
+                )}
+              </SelectField>
               <FormField
                 label="Solde congés annuel (jours)"
                 type="number"
@@ -272,7 +285,7 @@ export default function EmployeeDetailPage() {
   const router = useRouter();
   const employeeId = params?.id ?? '';
   const myRole = tokenStore.session?.role ?? '';
-  const canEdit = myRole === 'HR';
+  const canEdit = myRole === 'HR' || myRole === 'RESOURCE_MANAGER';
 
   const { data: employee, loading, error, refresh } = useApiData<Employee>(
     () => api.employee(employeeId) as Promise<Employee>,
@@ -280,7 +293,7 @@ export default function EmployeeDetailPage() {
     { fallbackMode: 'never' },
   );
   const { data: siteOptions } = useApiData<SiteOptions>(
-    () => (canEdit ? (api.settingsSiteOptions() as Promise<SiteOptions>) : Promise.resolve({ jobTitleOptions: fallbackJobTitleOptions })),
+    () => (myRole === 'HR' ? (api.settingsSiteOptions() as Promise<SiteOptions>) : Promise.resolve({ jobTitleOptions: fallbackJobTitleOptions })),
     { jobTitleOptions: fallbackJobTitleOptions },
   );
   const jobTitleOptions = Array.from(
@@ -351,7 +364,7 @@ export default function EmployeeDetailPage() {
   const currentYearBalances = balances.filter((b) => b.year === currentYear);
   const totalUsedDays = currentYearBalances.reduce((acc, b) => acc + Number(b.usedDays), 0);
   const totalRemainingDays = currentYearBalances.reduce((acc, b) => acc + Number(b.remainingDays), 0);
-  const canDelete = myRole === 'HR' && ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER'].includes(employee.user.role);
+  const canDelete = myRole === 'HR' && employee.user.role !== 'HR';
 
   async function handleDelete() {
     await api.deleteEmployee(employee.id);
@@ -380,7 +393,7 @@ export default function EmployeeDetailPage() {
             actions={
               canEdit ? (
                 <div className="flex flex-wrap items-center gap-2">
-                  <EditEmployeeModal employee={employee} jobTitleOptions={jobTitleOptions} onUpdated={refresh} />
+                  <EditEmployeeModal employee={employee} jobTitleOptions={jobTitleOptions} editorRole={myRole} onUpdated={refresh} />
                   {canDelete && (
                     <ConfirmDialog
                       title="Supprimer la ressource"
@@ -522,7 +535,7 @@ export default function EmployeeDetailPage() {
           {loadingTimesheets ? (
             <p className="text-sm text-mutedText">Chargement…</p>
           ) : (
-            <DataTable columns={timesheetColumns} data={timesheets} />
+            <DataTable columns={timesheetColumns} data={timesheets} getRowHref={(timesheet) => `/timesheets/${timesheet.id}`} />
           )}
         </section>
       </div>

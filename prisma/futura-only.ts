@@ -103,6 +103,53 @@ async function main() {
     },
   });
 
+  const defaultLeaveTypes = [
+    {
+      code: 'MAR-AL',
+      name: '[MAR] Congé annuel',
+      annualAllowanceDays: 18,
+      isPaid: true,
+      requiresApproval: true,
+    },
+    {
+      code: 'MAR-SL',
+      name: '[MAR] Congé maladie',
+      annualAllowanceDays: 6,
+      isPaid: true,
+      requiresApproval: true,
+    },
+    {
+      code: 'MAR-MR',
+      name: '[MAR] Congé de mariage',
+      annualAllowanceDays: 4,
+      isPaid: true,
+      requiresApproval: true,
+    },
+  ];
+
+  for (const leaveType of defaultLeaveTypes) {
+    await prisma.leaveType.upsert({
+      where: {
+        tenantId_code: {
+          tenantId: futura.id,
+          code: leaveType.code,
+        },
+      },
+      update: {
+        name: leaveType.name,
+        annualAllowanceDays: leaveType.annualAllowanceDays,
+        isPaid: leaveType.isPaid,
+        requiresApproval: leaveType.requiresApproval,
+        status: 'ACTIVE',
+      },
+      create: {
+        tenantId: futura.id,
+        ...leaveType,
+        status: 'ACTIVE',
+      },
+    });
+  }
+
   const hrPasswordHash = await bcrypt.hash('123456789', 12);
   const hr = await prisma.user.upsert({
     where: { email: HR_EMAIL },

@@ -11,19 +11,25 @@ import {
 } from '@tanstack/react-table';
 import { ChevronLeft, ChevronRight, ChevronsUpDown, ChevronUp, ChevronDown } from 'lucide-react';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { EmptyState } from './states';
 
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, unknown>[];
   data: TData[];
   pageSize?: number;
+  getRowHref?: (row: TData) => string | undefined;
+  onRowClick?: (row: TData) => void;
 }
 
 export function DataTable<TData>({
   columns,
   data,
   pageSize = 10,
+  getRowHref,
+  onRowClick,
 }: DataTableProps<TData>) {
+  const router = useRouter();
   const [sorting, setSorting] = useState<SortingState>([]);
 
   const table = useReactTable({
@@ -77,10 +83,29 @@ export function DataTable<TData>({
             </tr>
           </thead>
           <tbody className="divide-y divide-borderSoft">
-            {table.getRowModel().rows.map((row) => (
+            {table.getRowModel().rows.map((row) => {
+              const href = getRowHref?.(row.original);
+              const isClickable = Boolean(href || onRowClick);
+              const openRow = () => {
+                if (href) router.push(href);
+                else onRowClick?.(row.original);
+              };
+              return (
               <tr
                 key={row.id}
-                className="transition-colors hover:bg-surfaceHover"
+                tabIndex={isClickable ? 0 : undefined}
+                role={href ? 'link' : isClickable ? 'button' : undefined}
+                onClick={(event) => {
+                  if ((event.target as HTMLElement).closest('a,button,input,select,textarea')) return;
+                  openRow();
+                }}
+                onKeyDown={(event) => {
+                  if (isClickable && (event.key === 'Enter' || event.key === ' ')) {
+                    event.preventDefault();
+                    openRow();
+                  }
+                }}
+                className={`transition-colors hover:bg-surfaceHover ${isClickable ? 'cursor-pointer focus:bg-surfaceHover focus:outline-none' : ''}`}
               >
                 {row.getVisibleCells().map((cell) => (
                   <td
@@ -91,7 +116,8 @@ export function DataTable<TData>({
                   </td>
                 ))}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

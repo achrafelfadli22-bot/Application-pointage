@@ -24,11 +24,12 @@ export function StatusBadge({
   status,
   className,
 }: {
-  status: string;
+  status?: string | null;
   className?: string;
 }) {
-  const config = statusConfig[status];
-  const label = config?.label ?? status.replaceAll('_', ' ');
+  const normalizedStatus = status ?? '';
+  const config = statusConfig[normalizedStatus];
+  const label = config?.label ?? (normalizedStatus ? normalizedStatus.replaceAll('_', ' ') : '—');
   const styles = config?.className ?? 'bg-grayCard text-mutedText border-borderSoft';
 
   return (

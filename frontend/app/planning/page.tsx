@@ -1,343 +1,280 @@
 'use client';
 
-import { useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { CalendarRange, FolderKanban, Plus, Trash2 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
+import { PrimaryButton } from '@/components/ui/buttons';
+import { ErrorState } from '@/components/ui/states';
+import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { api } from '@/lib/api-client';
 import { useApiData } from '@/lib/use-api-data';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type Punch = {
+type Planning = {
   id: string;
-  punchDate: string;
-  checkInAt: string | null;
-  durationMinutes: number | null;
-  status: string;
-  isGpsAnomaly: boolean;
-  user: { id: string; firstName: string; lastName: string };
+  periodStart: string;
+  periodEnd: string;
+  status: 'DRAFT' | 'PUBLISHED';
+  publishedAt?: string | null;
+  lines: Array<{
+    site?: { project?: { id: string; code: string; name: string } | null } | null;
+    entries: Array<{ hours: number }>;
+  }>;
 };
+type Project = { id: string; code: string; name: string };
+type ProjectPlanning = Planning & { project: Project; sourceId: string };
+type PlanningScope = { timesheetPeriod: 'WEEKLY' | 'MONTHLY'; timesheetPeriodDays: number; sites: Array<{ id: string }>; isProjectManager: boolean };
 
-type LeaveRequest = {
-  id: string;
-  startDate: string;
-  endDate: string;
-  status: string;
-  user: { id: string };
-  leaveType: { name: string };
-};
-
-type Employee = {
-  id: string;
-  jobTitle: string;
-  status: string;
-  user: { id: string; firstName: string; lastName: string; role: string };
-};
-
-type AttendanceSettings = {
-  workDayStartTime: string;
-  lateToleranceMinutes: number;
-};
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function isoDate(d: Date) {
-  return d.toISOString().slice(0, 10);
+function mondayIso() {
+  const now = new Date();
+  const day = (now.getUTCDay() + 6) % 7;
+  now.setUTCDate(now.getUTCDate() - day);
+  return now.toISOString().slice(0, 10);
 }
 
-function startOfWeek(d: Date): Date {
-  const copy = new Date(d);
-  const day  = copy.getUTCDay();
-  copy.setUTCDate(copy.getUTCDate() - ((day + 6) % 7));
-  copy.setUTCHours(0, 0, 0, 0);
-  return copy;
+function plusDays(value: string, count: number) {
+  const date = new Date(`${value}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + count);
+  return date.toISOString().slice(0, 10);
 }
 
-const DAYS_FR = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'];
-
-function addDays(d: Date, n: number): Date {
-  const copy = new Date(d);
-  copy.setUTCDate(copy.getUTCDate() + n);
-  return copy;
-}
-
-function minutesFromTime(value: string): number {
-  const [hourRaw = '8', minuteRaw = '0'] = value.split(':');
-  const hour = Number(hourRaw);
-  const minute = Number(minuteRaw);
-  return (Number.isFinite(hour) ? hour : 8) * 60 + (Number.isFinite(minute) ? minute : 0);
-}
-
-type DayStatus = 'PRESENT' | 'LATE' | 'ABSENT' | 'LEAVE' | 'WEEKEND' | 'FUTURE';
-
-function getStatusStyle(s: DayStatus): { bg: string; text: string; label: string } {
-  switch (s) {
-    case 'PRESENT': return { bg: 'bg-green-100 border-green-300',  text: 'text-green-700',  label: 'Présent' };
-    case 'LATE':    return { bg: 'bg-amber-100 border-amber-300',  text: 'text-amber-700',  label: 'Retard' };
-    case 'ABSENT':  return { bg: 'bg-red-50 border-red-200',       text: 'text-red-500',    label: 'Absent' };
-    case 'LEAVE':   return { bg: 'bg-blue-100 border-blue-200',    text: 'text-blue-700',   label: 'Congé' };
-    case 'WEEKEND': return { bg: 'bg-surface border-borderSoft',   text: 'text-hintText',   label: '—' };
-    case 'FUTURE':  return { bg: 'bg-surface border-borderSoft',   text: 'text-hintText',   label: '' };
-    default:        return { bg: 'bg-surface border-borderSoft',   text: 'text-mutedText',  label: '?' };
+function rollingMonthEnd(value: string) {
+  const start = new Date(`${value}T00:00:00Z`);
+  if (start.getUTCDate() === 1) {
+    return new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
   }
+  const nextMonth = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 1));
+  const lastDayOfNextMonth = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 2, 0)).getUTCDate();
+  nextMonth.setUTCDate(Math.min(start.getUTCDate() - 1, lastDayOfNextMonth));
+  return nextMonth.toISOString().slice(0, 10);
 }
 
-// ─── Demo fallbacks ───────────────────────────────────────────────────────────
+function groupEmployeePlannings(plannings: Planning[]) {
+  const groups = new Map<string, Planning>();
+  for (const planning of plannings) {
+    const start = planning.periodStart.slice(0, 10);
+    const end = planning.periodEnd.slice(0, 10);
+    const key = `${start}:${end}`;
+    const existing = groups.get(key);
+    if (existing) {
+      existing.lines.push(...planning.lines);
+    } else {
+      groups.set(key, { ...planning, id: key, periodStart: start, periodEnd: end, lines: [...planning.lines] });
+    }
+  }
+  return [...groups.values()].sort((a, b) => b.periodStart.localeCompare(a.periodStart));
+}
 
-const demoEmployees: Employee[] = [
-  { id: 'e1', jobTitle: 'Maçon', status: 'ACTIVE', user: { id: 'u1', firstName: 'Omar', lastName: 'Mansouri', role: 'EMPLOYEE' } },
-  { id: 'e2', jobTitle: 'Chef de site', status: 'ACTIVE', user: { id: 'u2', firstName: 'Karim', lastName: 'Benali', role: 'MANAGER' } },
-  { id: 'e3', jobTitle: 'Électricien', status: 'ACTIVE', user: { id: 'u3', firstName: 'Fatima', lastName: 'Zahraoui', role: 'EMPLOYEE' } },
-];
+function normalizePeriod(planning: Planning) {
+  return {
+    start: planning.periodStart.slice(0, 10),
+    end: planning.periodEnd.slice(0, 10),
+  };
+}
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+function groupProjectManagerPlannings(plannings: Planning[]) {
+  const projects = new Map<string, { project: Project; periods: Map<string, ProjectPlanning> }>();
+  for (const planning of plannings) {
+    const { start, end } = normalizePeriod(planning);
+    for (const line of planning.lines) {
+      const project = line.site?.project;
+      if (!project) continue;
+      let group = projects.get(project.id);
+      if (!group) {
+        group = { project, periods: new Map() };
+        projects.set(project.id, group);
+      }
+      const periodKey = `${start}:${end}`;
+      const existing = group.periods.get(periodKey);
+      if (existing) existing.lines.push(line);
+      else group.periods.set(periodKey, { ...planning, id: `${project.id}:${periodKey}`, sourceId: planning.id, project, periodStart: start, periodEnd: end, lines: [line] });
+    }
+  }
+  return [...projects.values()]
+    .map(({ project, periods }) => ({ project, periods: [...periods.values()].sort((a, b) => b.periodStart.localeCompare(a.periodStart)) }))
+    .sort((a, b) => `${a.project.code} ${a.project.name}`.localeCompare(`${b.project.code} ${b.project.name}`, 'fr'));
+}
 
 export default function PlanningPage() {
-  const [weekStart, setWeekStart] = useState<Date>(() => startOfWeek(new Date()));
-
-  const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
-  const weekEnd  = weekDays[6]!;
-
-  const { data: employees } = useApiData<Employee[]>(
-    () => api.employees() as Promise<Employee[]>,
-    demoEmployees,
+  const [periodStart, setPeriodStart] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const { data, error, refresh } = useApiData<Planning[]>(() => api.plannings() as Promise<Planning[]>, []);
+  const { data: planningScope, loading: settingsLoading, error: settingsError } = useApiData<PlanningScope>(
+    () => api.planningScope() as Promise<PlanningScope>,
+    { timesheetPeriod: 'WEEKLY', timesheetPeriodDays: 7, sites: [], isProjectManager: false },
+    { fallbackMode: 'never' },
   );
+  const canManage = planningScope.sites.length > 0;
+  const isProjectManager = planningScope.isProjectManager;
+  const isMonthly = String(planningScope.timesheetPeriod).toUpperCase() === 'MONTHLY' || planningScope.timesheetPeriodDays === 30;
+  const groupedByProject = canManage || isProjectManager;
+  const projectGroups = groupedByProject ? groupProjectManagerPlannings(data) : [];
+  const emptyPlannings = canManage ? data.filter((planning) => planning.lines.length === 0) : [];
+  const displayedPlannings = groupedByProject ? [] : groupEmployeePlannings(data);
+  const selectedDate = periodStart ? new Date(`${periodStart}T00:00:00Z`) : null;
+  const periodEnd = selectedDate
+    ? isMonthly
+      ? rollingMonthEnd(periodStart)
+      : plusDays(periodStart, 6)
+    : '';
 
-  const { data: punches } = useApiData<Punch[]>(
-    () => api.attendance() as Promise<Punch[]>,
-    [],
-  );
+  useEffect(() => {
+    if (settingsLoading || periodStart) return;
+    if (isMonthly) {
+      const now = new Date();
+      setPeriodStart(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString().slice(0, 10));
+    } else {
+      setPeriodStart(mondayIso());
+    }
+  }, [isMonthly, periodStart, settingsLoading]);
 
-  const { data: leaves } = useApiData<LeaveRequest[]>(
-    () => api.leaveRequests() as Promise<LeaveRequest[]>,
-    [],
-  );
-
-  const { data: attendanceSettings } = useApiData<AttendanceSettings>(
-    () => api.settingsAttendance() as Promise<AttendanceSettings>,
-    { workDayStartTime: '08:00', lateToleranceMinutes: 15 },
-  );
-
-  const today   = new Date();
-  const todayIso = isoDate(today);
-  const lateThresholdMinutes = minutesFromTime(attendanceSettings.workDayStartTime) + attendanceSettings.lateToleranceMinutes;
-
-  // Determine cell status for each employee × day
-  function getCellStatus(emp: Employee, day: Date): { status: DayStatus; hours?: string; leaveType?: string } {
-    const iso     = isoDate(day);
-    const dayOfWeek = day.getUTCDay(); // 0=Sun, 6=Sat
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    const isFuture  = iso > todayIso;
-
-    if (isWeekend) return { status: 'WEEKEND' };
-    if (isFuture)  return { status: 'FUTURE' };
-
-    // Check approved leave
-    const onLeave = leaves.find((l) =>
-      l.user.id === emp.user.id &&
-      l.status === 'APPROVED' &&
-      iso >= l.startDate.slice(0, 10) &&
-      iso <= l.endDate.slice(0, 10),
-    );
-    if (onLeave) return { status: 'LEAVE', leaveType: onLeave.leaveType.name };
-
-    // Check punch
-    const punch = punches.find(
-      (p) => p.user.id === emp.user.id && p.punchDate.slice(0, 10) === iso,
-    );
-    if (!punch) return { status: 'ABSENT' };
-
-    // Determine late from tenant attendance settings.
-    const isLate = punch.checkInAt
-      ? new Date(punch.checkInAt).getUTCHours() * 60 + new Date(punch.checkInAt).getUTCMinutes() > lateThresholdMinutes
-      : false;
-
-    const hours = punch.durationMinutes
-      ? `${(punch.durationMinutes / 60).toFixed(1)}h`
-      : punch.checkInAt ? 'En cours' : '';
-
-    return { status: isLate ? 'LATE' : 'PRESENT', hours };
+  async function create() {
+    setCreating(true);
+    setActionError(null);
+    try {
+      const planning = await api.createPlanning({ periodStart, periodEnd }) as Planning;
+      window.location.href = `/planning/${planning.id}`;
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : 'Impossible de créer la planification.');
+    } finally {
+      setCreating(false);
+    }
   }
 
-  function prevWeek() { setWeekStart((d) => addDays(d, -7)); }
-  function nextWeek() { setWeekStart((d) => addDays(d, 7)); }
-  function goToday()  { setWeekStart(startOfWeek(new Date())); }
-
-  const isCurrentWeek = isoDate(weekStart) === isoDate(startOfWeek(new Date()));
-
-  const activeEmployees = employees.filter((e) => e.status === 'ACTIVE');
-
-  // Stats de la semaine
-  const weekStats = (() => {
-    let present = 0, absent = 0, leave = 0, late = 0;
-    for (const emp of activeEmployees) {
-      for (let i = 0; i < 5; i++) { // lun-ven only
-        const day = weekDays[i]!;
-        const { status } = getCellStatus(emp, day);
-        if (status === 'PRESENT') present++;
-        else if (status === 'ABSENT') absent++;
-        else if (status === 'LEAVE') leave++;
-        else if (status === 'LATE') late++;
-      }
+  async function remove(id: string) {
+    try {
+      await api.deletePlanning(id);
+      refresh();
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : 'Suppression impossible.');
     }
-    return { present, absent, leave, late };
-  })();
-
-  const weekLabel = `${weekDays[0]!.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })} – ${weekEnd.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}`;
+  }
 
   return (
     <AppShell>
       <div className="grid gap-6">
-        <PageHeader
-          title="Planning équipe"
-          description="Présence, retards, absences et congés — vue hebdomadaire."
-        />
+        <PageHeader title="Planification" description={canManage ? "Préparez les heures de votre équipe par site avant leur réalisation." : isProjectManager ? "Consultez, par période, toutes les lignes planifiées pour vos projets." : "Consultez vos heures planifiées, regroupées par période."} />
 
-        {/* Navigation semaine */}
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={prevWeek}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-borderSoft bg-surface text-mutedText transition-colors hover:bg-surfaceHover hover:text-bodyText"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <span className="min-w-[240px] text-center text-sm font-semibold text-bodyText">{weekLabel}</span>
-            <button
-              type="button"
-              onClick={nextWeek}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-borderSoft bg-surface text-mutedText transition-colors hover:bg-surfaceHover hover:text-bodyText"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            {!isCurrentWeek && (
-              <button
-                type="button"
-                onClick={goToday}
-                className="rounded-lg border border-borderSoft bg-surface px-3 py-1.5 text-xs font-medium text-accent transition-colors hover:bg-accentLight"
-              >
-                Aujourd'hui
-              </button>
-            )}
+        {canManage && <section className="flex flex-col gap-3 rounded-xl border border-borderSoft bg-surface p-4 shadow-card sm:flex-row sm:items-end">
+          <label className="grid gap-1 text-sm font-medium text-bodyText">
+            Début de la période
+            <input type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} className="h-9 rounded-md border border-borderSoft px-3" />
+          </label>
+          <div className="text-sm text-mutedText sm:pb-1">
+            <p>Périodicité : <span className="font-semibold text-bodyText">{isMonthly ? 'Mensuelle' : 'Hebdomadaire'}</span></p>
+            <p>{isMonthly ? 'Fin (veille de ce jour dans le mois suivant)' : 'Fin'} : {periodEnd ? new Date(`${periodEnd}T00:00:00Z`).toLocaleDateString('fr-FR') : '—'}</p>
           </div>
+          <PrimaryButton type="button" onClick={create} disabled={creating || settingsLoading || !periodStart || !periodEnd} className="sm:ml-auto">
+            <Plus className="h-4 w-4" /> {creating ? 'Création…' : 'Nouvelle planification'}
+          </PrimaryButton>
+        </section>}
 
-          {/* Légende + stats */}
-          <div className="flex flex-wrap items-center gap-3">
-            {[
-              { label: `${weekStats.present} présent(s)`,  bg: 'bg-green-100', text: 'text-green-700' },
-              { label: `${weekStats.late} retard(s)`,      bg: 'bg-amber-100', text: 'text-amber-700' },
-              { label: `${weekStats.absent} absent(s)`,    bg: 'bg-red-50',    text: 'text-red-500' },
-              { label: `${weekStats.leave} congé(s)`,      bg: 'bg-blue-100',  text: 'text-blue-700' },
-            ].map((s) => (
-              <span key={s.label} className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${s.bg} ${s.text}`}>
-                {s.label}
-              </span>
-            ))}
-          </div>
-        </div>
+        {(error || settingsError || actionError) && <ErrorState message={actionError || settingsError || error || 'Erreur'} />}
 
-        {/* Grille */}
-        <div className="overflow-x-auto rounded-xl border border-borderSoft bg-surface shadow-card">
-          <table className="w-full min-w-[520px] border-collapse text-sm sm:min-w-[700px]">
-            <thead>
-              <tr className="border-b border-borderSoft bg-grayCard">
-                {/* Col employé */}
-                <th className="w-44 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-mutedText">
-                  Employé
-                </th>
-                {weekDays.map((day, i) => {
-                  const iso   = isoDate(day);
-                  const isToday = iso === todayIso;
-                  const isWE   = day.getUTCDay() === 0 || day.getUTCDay() === 6;
+        <div className="grid gap-3">
+          {(groupedByProject ? projectGroups.length === 0 && emptyPlannings.length === 0 : displayedPlannings.length === 0) && (
+            <div className="rounded-xl border border-dashed border-borderSoft bg-surface p-10 text-center text-sm text-mutedText">
+              Aucune planification. Choisissez une période pour commencer.
+            </div>
+          )}
+          {emptyPlannings.length > 0 && (
+            <section className="grid gap-3 rounded-xl border border-borderSoft bg-grayCard/40 p-3">
+              <div className="flex items-center gap-2 px-1">
+                <CalendarRange className="h-5 w-5 text-accent" />
+                <h2 className="font-semibold text-bodyText">Planifications à compléter</h2>
+                <span className="ml-auto text-xs text-mutedText">{emptyPlannings.length} période(s)</span>
+              </div>
+              {emptyPlannings.map((planning) => (
+                <div key={planning.id} className="flex flex-col gap-3 rounded-xl border border-borderSoft bg-surface p-4 shadow-card sm:flex-row sm:items-center">
+                  <CalendarRange className="h-5 w-5 text-accent" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-bodyText">
+                      {new Date(planning.periodStart).toLocaleDateString('fr-FR')} – {new Date(planning.periodEnd).toLocaleDateString('fr-FR')}
+                    </p>
+                    <p className="text-xs text-mutedText">Aucune ligne · 0 h planifiée</p>
+                  </div>
+                  <span className="w-fit rounded-full bg-grayCard px-2.5 py-1 text-xs font-semibold text-mutedText">Brouillon</span>
+                  <Link href={`/planning/${planning.id}`} className="text-sm font-semibold text-accent hover:underline">Compléter</Link>
+                  <ConfirmDialog
+                    title="Supprimer la planification"
+                    description="Cette planification vide sera supprimée définitivement."
+                    confirmLabel="Supprimer"
+                    onConfirm={() => remove(planning.id)}
+                    trigger={<button type="button" className="rounded-md p-2 text-dangerText hover:bg-dangerBg" title="Supprimer"><Trash2 className="h-4 w-4" /></button>}
+                  />
+                </div>
+              ))}
+            </section>
+          )}
+          {groupedByProject && projectGroups.map(({ project, periods }) => (
+            <section key={project.id} className="grid gap-3 rounded-xl border border-borderSoft bg-grayCard/40 p-3">
+              <div className="flex items-center gap-2 px-1">
+                <FolderKanban className="h-5 w-5 text-accent" />
+                <h2 className="font-semibold text-bodyText">{project.code} - {project.name}</h2>
+                <span className="ml-auto text-xs text-mutedText">{periods.length} période(s)</span>
+              </div>
+              <div className="grid gap-3">
+                {periods.map((planning) => {
+                  const total = planning.lines.reduce((sum, line) => sum + line.entries.reduce((lineSum, entry) => lineSum + Number(entry.hours), 0), 0);
                   return (
-                    <th
-                      key={iso}
-                      className={`px-2 py-3 text-center text-xs font-semibold uppercase tracking-wide ${
-                        isWE ? 'text-hintText' : isToday ? 'text-accentText' : 'text-mutedText'
-                      } ${isWE ? 'hidden sm:table-cell' : ''}`}
-                    >
-                      <div className={isToday ? 'font-bold' : ''}>{DAYS_FR[i]}</div>
-                      <div className={`mt-0.5 text-[11px] ${isToday ? 'font-bold text-accentText' : 'text-hintText'}`}>
-                        {day.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                    <div key={planning.id} className="flex flex-col gap-3 rounded-xl border border-borderSoft bg-surface p-4 shadow-card sm:flex-row sm:items-center">
+                      <CalendarRange className="h-5 w-5 text-accent" />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-bodyText">{new Date(planning.periodStart).toLocaleDateString('fr-FR')} – {new Date(planning.periodEnd).toLocaleDateString('fr-FR')}</p>
+                        <p className="text-xs text-mutedText">{planning.lines.length} ligne(s) · {total.toFixed(1)} h planifiées</p>
                       </div>
-                    </th>
+                      <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${planning.status === 'PUBLISHED' ? 'bg-successBg text-successText' : 'bg-grayCard text-mutedText'}`}>
+                        {planning.status === 'PUBLISHED' ? 'Publiée' : 'Brouillon'}
+                      </span>
+                      <Link
+                        href={canManage ? `/planning/${planning.sourceId}` : `/planning/my-period?start=${planning.periodStart.slice(0, 10)}&end=${planning.periodEnd.slice(0, 10)}&projectId=${project.id}`}
+                        className="text-sm font-semibold text-accent hover:underline"
+                      >
+                        {canManage ? (planning.status === 'PUBLISHED' ? 'Consulter / modifier' : 'Modifier') : 'Consulter la période'}
+                      </Link>
+                      {canManage && <ConfirmDialog
+                        title="Supprimer la planification"
+                        description="Cette planification et toutes ses lignes seront supprimées définitivement."
+                        confirmLabel="Supprimer"
+                        onConfirm={() => remove(planning.sourceId)}
+                        trigger={<button type="button" className="rounded-md p-2 text-dangerText hover:bg-dangerBg" title="Supprimer"><Trash2 className="h-4 w-4" /></button>}
+                      />}
+                    </div>
                   );
                 })}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-borderSoft">
-              {activeEmployees.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-mutedText">
-                    Aucun employé actif.
-                  </td>
-                </tr>
-              ) : (
-                activeEmployees.map((emp) => (
-                  <tr key={emp.id} className="transition-colors hover:bg-surfaceHover/50">
-                    {/* Employé */}
-                    <td className="px-4 py-2.5">
-                      <div className="flex items-center gap-2.5">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accentLight text-[10px] font-semibold text-accentText">
-                          {emp.user.firstName[0]}{emp.user.lastName[0]}
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold text-bodyText">
-                            {emp.user.firstName} {emp.user.lastName}
-                          </div>
-                          <div className="text-[10px] text-mutedText">{emp.jobTitle}</div>
-                        </div>
-                      </div>
-                    </td>
-                    {/* Jours */}
-                    {weekDays.map((day) => {
-                      const iso = isoDate(day);
-                      const isWE = day.getUTCDay() === 0 || day.getUTCDay() === 6;
-                      const { status, hours, leaveType } = getCellStatus(emp, day);
-                      const style = getStatusStyle(status);
-                      return (
-                        <td key={iso} className={`px-1.5 py-1.5 text-center ${isWE ? 'hidden sm:table-cell' : ''}`}>
-                          {status === 'WEEKEND' || status === 'FUTURE' ? (
-                            <div className={`mx-auto flex h-10 w-full max-w-[70px] items-center justify-center rounded-md border text-[10px] ${style.bg} ${style.text}`}>
-                              {status === 'WEEKEND' ? '—' : ''}
-                            </div>
-                          ) : (
-                            <div
-                              className={`mx-auto flex h-10 w-full max-w-[70px] flex-col items-center justify-center rounded-md border text-[10px] font-semibold ${style.bg} ${style.text}`}
-                            >
-                              <span>{leaveType ? '✈' : style.label}</span>
-                              {hours && <span className="text-[9px] font-normal opacity-80">{hours}</span>}
-                              {leaveType && <span className="text-[9px] font-normal opacity-80 truncate w-full text-center px-1">{leaveType}</span>}
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Légende */}
-        <div className="flex flex-wrap gap-4 text-xs text-mutedText">
-          {[
-            { label: 'Présent', bg: 'bg-green-100 border-green-300', text: 'text-green-700' },
-            { label: 'Retard',  bg: 'bg-amber-100 border-amber-300', text: 'text-amber-700' },
-            { label: 'Absent',  bg: 'bg-red-50 border-red-200',      text: 'text-red-500' },
-            { label: 'Congé',   bg: 'bg-blue-100 border-blue-200',   text: 'text-blue-700' },
-            { label: 'Week-end',bg: 'bg-surface border-borderSoft',   text: 'text-hintText' },
-          ].map((l) => (
-            <span key={l.label} className="flex items-center gap-1.5">
-              <span className={`inline-flex h-4 w-8 items-center justify-center rounded border text-[9px] font-semibold ${l.bg} ${l.text}`}>
-                {l.label === 'Présent' ? '✓' : l.label === 'Absent' ? '✗' : l.label === 'Congé' ? '✈' : l.label === 'Retard' ? '!' : '—'}
-              </span>
-              {l.label}
-            </span>
+              </div>
+            </section>
           ))}
+          {displayedPlannings.map((planning) => {
+            const total = planning.lines.reduce((sum, line) => sum + line.entries.reduce((lineSum, entry) => lineSum + Number(entry.hours), 0), 0);
+            const destination = canManage
+              ? `/planning/${planning.id}`
+              : `/planning/my-period?start=${planning.periodStart.slice(0, 10)}&end=${planning.periodEnd.slice(0, 10)}`;
+            return (
+              <div key={planning.id} className="flex flex-col gap-3 rounded-xl border border-borderSoft bg-surface p-4 shadow-card sm:flex-row sm:items-center">
+                <CalendarRange className="h-5 w-5 text-accent" />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-bodyText">
+                    {new Date(planning.periodStart).toLocaleDateString('fr-FR')} – {new Date(planning.periodEnd).toLocaleDateString('fr-FR')}
+                  </p>
+                  <p className="text-xs text-mutedText">{planning.lines.length} ligne(s) · {total.toFixed(1)} h planifiées</p>
+                </div>
+                <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${planning.status === 'PUBLISHED' ? 'bg-successBg text-successText' : 'bg-grayCard text-mutedText'}`}>
+                  {planning.status === 'PUBLISHED' ? 'Publiée' : 'Brouillon'}
+                </span>
+                <Link href={destination} className="text-sm font-semibold text-accent hover:underline">{canManage ? (planning.status === 'PUBLISHED' ? 'Consulter / modifier' : 'Modifier') : 'Consulter la période'}</Link>
+                {canManage && <ConfirmDialog
+                  title="Supprimer la planification"
+                  description="Cette planification et toutes ses lignes seront supprimées définitivement."
+                  confirmLabel="Supprimer"
+                  onConfirm={() => remove(planning.id)}
+                  trigger={<button type="button" className="rounded-md p-2 text-dangerText hover:bg-dangerBg" title="Supprimer"><Trash2 className="h-4 w-4" /></button>}
+                />}
+              </div>
+            );
+          })}
         </div>
       </div>
     </AppShell>

@@ -8,13 +8,11 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { ArrowLeft, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
-import { ProgressMeter } from '@/components/domain/progress-meter';
 import { AccentCard, SummaryCounters } from '@/components/ui/cards';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { DangerButton, PrimaryButton, SecondaryButton } from '@/components/ui/buttons';
 import { DataTable } from '@/components/ui/data-table';
 import { DateField, FormField, SelectField } from '@/components/ui/form-fields';
-import { StatusBadge } from '@/components/ui/status-badge';
 import { api, tokenStore } from '@/lib/api-client';
 import { useApiData } from '@/lib/use-api-data';
 
@@ -29,10 +27,7 @@ type ProjectSite = {
   id: string;
   code: string;
   name: string;
-  clientName: string;
-  city?: string | null;
-  status: string;
-  progressPercent: number;
+  address?: string | null;
   manager?: { id: string; firstName: string; lastName: string; email: string } | null;
   _count: { assignments: number; attendancePunches: number };
 };
@@ -71,13 +66,16 @@ function EditProjectModal({
   project,
   employees,
   clientOptions,
+  editorRole,
   onUpdated,
 }: {
   project: Project;
   employees: Employee[];
   clientOptions: string[];
+  editorRole: string;
   onUpdated: () => void;
 }) {
+  const isHR = editorRole === 'HR';
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     code: project.code,
@@ -107,19 +105,26 @@ function EditProjectModal({
 
   const managerOptions = employees
     .filter((employee) => employee.status === 'ACTIVE')
-    .filter((employee) => employee.user.status !== 'INACTIVE')
-    .filter((employee) => employee.user.role === 'PROJECT_MANAGER');
+    .filter((employee) => employee.user.status !== 'INACTIVE');
 
   async function handleSubmit() {
     if (!form.code || !form.name || !form.projectManagerId) {
-      setError('Code, nom et chef de projet sont obligatoires.');
+      setError('Le code, le nom et le chef de projet sont obligatoires.');
       return;
     }
 
     setSubmitting(true);
     setError(null);
     try {
-      const payload: Record<string, unknown> = { ...form };
+      const payload: Record<string, unknown> = {
+        projectManagerId: form.projectManagerId,
+        code: form.code,
+        name: form.name,
+        clientName: form.clientName,
+        startDate: form.startDate,
+        plannedEndDate: form.plannedEndDate,
+        status: form.status,
+      };
       if (!form.clientName) delete payload.clientName;
       if (!form.startDate) delete payload.startDate;
       if (!form.plannedEndDate) delete payload.plannedEndDate;
@@ -153,9 +158,9 @@ function EditProjectModal({
 
           <div className="grid gap-4 p-5">
             <div className="grid gap-3 md:grid-cols-2">
-              <FormField label="Code projet" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
-              <FormField label="Nom du projet" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
-              <SelectField label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
+               <FormField disabled={!isHR} label="Code projet" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
+               <FormField disabled={!isHR} label="Nom du projet" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
+               <SelectField disabled={!isHR} label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
                 <option value="">Non renseigne</option>
                 {clientOptions.map((client) => (
                   <option key={client} value={client}>
@@ -163,21 +168,25 @@ function EditProjectModal({
                   </option>
                 ))}
               </SelectField>
-              <SelectField label="Chef de projet" value={form.projectManagerId} onChange={(e) => setForm((p) => ({ ...p, projectManagerId: e.target.value }))}>
-                <option value="">Selectionner</option>
-                {managerOptions.map((employee) => (
-                  <option key={employee.user.id} value={employee.user.id}>
-                    {employee.user.firstName} {employee.user.lastName}
-                  </option>
-                ))}
-              </SelectField>
-              <SelectField label="Etat du projet" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
+               {isHR ? (
+                 <SelectField label="Chef de projet" value={form.projectManagerId} onChange={(e) => setForm((p) => ({ ...p, projectManagerId: e.target.value }))}>
+                   <option value="">Selectionner</option>
+                   {managerOptions.map((employee) => (
+                     <option key={employee.user.id} value={employee.user.id}>
+                       {employee.user.firstName} {employee.user.lastName}
+                     </option>
+                   ))}
+                 </SelectField>
+               ) : (
+                 <FormField disabled label="Chef de projet" value={`${project.projectManager.firstName} ${project.projectManager.lastName}`} />
+               )}
+               <SelectField disabled={!isHR} label="Etat du projet" value={form.status} onChange={(e) => setForm((p) => ({ ...p, status: e.target.value }))}>
                 <option value="ACTIVE">Actif</option>
                 <option value="SUSPENDED">Suspendu</option>
                 <option value="COMPLETED">Termine</option>
               </SelectField>
-              <DateField label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
-              <DateField label="Fin prévue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
+               <DateField disabled={!isHR} label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
+               <DateField disabled={!isHR} label="Fin prévue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
             </div>
 
             {error && <p className="text-sm text-dangerText">{error}</p>}
@@ -201,14 +210,6 @@ const emptySiteForm = {
   name: '',
   managerId: '',
   address: '',
-  city: '',
-  country: 'MA',
-  startDate: '',
-  plannedEndDate: '',
-  progressPercent: 0,
-  latitude: '',
-  longitude: '',
-  gpsRadiusMeters: 200,
 };
 
 function NewProjectSiteModal({
@@ -229,42 +230,21 @@ function NewProjectSiteModal({
     if (!open) return;
     setForm(emptySiteForm);
     setError(null);
-  }, [open, project.clientName]);
-
-  const managerOptions = employees
-    .filter((employee) => employee.status === 'ACTIVE')
-    .filter((employee) => employee.user.status !== 'INACTIVE')
-    .filter((employee) => employee.user.role === 'MANAGER');
+  }, [open]);
 
   async function handleSubmit() {
-    if (!form.code.trim() || !form.name.trim()) {
-      setError('Code et nom sont obligatoires.');
+    if (!form.code.trim() || !form.name.trim() || !form.managerId) {
+      setError('Le code, le nom et le chef de site sont obligatoires.');
       return;
     }
-    if (!project.clientName?.trim()) {
-      setError("Le client doit d'abord etre defini dans le projet.");
-      return;
-    }
-
     setSubmitting(true);
     setError(null);
     try {
       const payload: Record<string, unknown> = {
         ...form,
         projectId: project.id,
-        clientName: project.clientName,
-        progressPercent: Number(form.progressPercent),
-        gpsRadiusMeters: Number(form.gpsRadiusMeters),
       };
-      if (!form.managerId) delete payload.managerId;
       if (!form.address) delete payload.address;
-      if (!form.city) delete payload.city;
-      if (!form.startDate) delete payload.startDate;
-      if (!form.plannedEndDate) delete payload.plannedEndDate;
-      if (form.latitude) payload.latitude = Number(form.latitude);
-      else delete payload.latitude;
-      if (form.longitude) payload.longitude = Number(form.longitude);
-      else delete payload.longitude;
 
       await api.createSite(payload);
       setOpen(false);
@@ -304,26 +284,16 @@ function NewProjectSiteModal({
               <FormField label="Code site" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
               <FormField label="Nom du site" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
               <SelectField label="Chef de site" value={form.managerId} onChange={(e) => setForm((p) => ({ ...p, managerId: e.target.value }))}>
-                <option value="">Selectionner</option>
-                {managerOptions.map((employee) => (
-                  <option key={employee.user.id} value={employee.user.id}>
-                    {employee.user.firstName} {employee.user.lastName}
-                  </option>
-                ))}
+                <option value="">Sélectionner</option>
+                {employees
+                  .filter((employee) => employee.status === 'ACTIVE' && employee.user.status !== 'INACTIVE')
+                  .map((employee) => (
+                    <option key={employee.user.id} value={employee.user.id}>
+                      {employee.user.firstName} {employee.user.lastName}
+                    </option>
+                  ))}
               </SelectField>
               <FormField label="Adresse" value={form.address} onChange={(e) => setForm((p) => ({ ...p, address: e.target.value }))} />
-              <FormField label="Ville" value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} />
-              <FormField label="Pays (ISO)" value={form.country} onChange={(e) => setForm((p) => ({ ...p, country: e.target.value }))} />
-              <FormField label="Avancement (%)" type="number" min={0} max={100} value={form.progressPercent} onChange={(e) => setForm((p) => ({ ...p, progressPercent: Number(e.target.value) }))} />
-              <DateField label="Date de debut" value={form.startDate} onChange={(e) => setForm((p) => ({ ...p, startDate: e.target.value }))} />
-              <DateField label="Fin prévue" value={form.plannedEndDate} onChange={(e) => setForm((p) => ({ ...p, plannedEndDate: e.target.value }))} />
-            </div>
-
-            <p className="text-xs font-semibold uppercase tracking-wide text-mutedText">Geolocalisation GPS (optionnel)</p>
-            <div className="grid gap-3 md:grid-cols-3">
-              <FormField label="Latitude" value={form.latitude} onChange={(e) => setForm((p) => ({ ...p, latitude: e.target.value }))} />
-              <FormField label="Longitude" value={form.longitude} onChange={(e) => setForm((p) => ({ ...p, longitude: e.target.value }))} />
-              <FormField label="Rayon GPS (m)" type="number" min={1} value={form.gpsRadiusMeters} onChange={(e) => setForm((p) => ({ ...p, gpsRadiusMeters: Number(e.target.value) }))} />
             </div>
 
             {error && <p className="text-sm text-dangerText">{error}</p>}
@@ -345,13 +315,13 @@ export default function ProjectDetailPage() {
   const router = useRouter();
   const projectId = params?.id ?? '';
   const myRole = tokenStore.session?.role ?? '';
-  const canEdit = myRole === 'RESOURCE_MANAGER' || myRole === 'HR';
+  const canEdit = myRole === 'HR';
   const { data: project, refresh } = useApiData<Project>(() => api.project(projectId) as Promise<Project>, {
     ...fallbackProject,
     id: projectId,
   });
   const { data: employees } = useApiData<Employee[]>(
-    () => (canEdit ? (api.employees() as Promise<Employee[]>) : Promise.resolve([])),
+    () => (myRole === 'HR' ? (api.employees() as Promise<Employee[]>) : Promise.resolve([])),
     [],
   );
   const { data: siteOptions } = useApiData<SiteOptions>(
@@ -360,7 +330,7 @@ export default function ProjectDetailPage() {
   );
   const clientOptions = Array.from(
     new Set(
-      [project.clientName, ...(siteOptions.clientOptions ?? []), ...project.sites.map((site) => site.clientName)]
+      [project.clientName, ...(siteOptions.clientOptions ?? [])]
         .map((client) => client?.trim())
         .filter(Boolean) as string[],
     ),
@@ -374,20 +344,9 @@ export default function ProjectDetailPage() {
   const columns: ColumnDef<ProjectSite, unknown>[] = [
     { header: 'Code', accessorKey: 'code' },
     { header: 'Site', cell: ({ row }) => row.original.name },
-    { header: 'Client', accessorKey: 'clientName' },
-    { header: 'Ville', cell: ({ row }) => row.original.city ?? '-' },
     { header: 'Chef de site', cell: ({ row }) => row.original.manager ? `${row.original.manager.firstName} ${row.original.manager.lastName}` : '-' },
+    { header: 'Adresse', cell: ({ row }) => row.original.address ?? '-' },
     { header: 'Equipe', cell: ({ row }) => row.original._count.assignments },
-    { header: 'Avancement', cell: ({ row }) => <ProgressMeter value={row.original.progressPercent} size="sm" /> },
-    { header: 'Statut', cell: ({ row }) => <StatusBadge status={row.original.status} /> },
-    {
-      header: 'Actions',
-      cell: ({ row }) => (
-        <Link href={`/projects/${project.id}/sites/${row.original.id}`} className="font-semibold text-accent hover:underline">
-          Voir
-        </Link>
-      ),
-    },
   ];
 
   return (
@@ -404,8 +363,8 @@ export default function ProjectDetailPage() {
             actions={
               canEdit ? (
                 <div className="flex flex-wrap gap-2">
-                  <EditProjectModal project={project} employees={employees} clientOptions={clientOptions} onUpdated={refresh} />
-                  <ConfirmDialog
+                  <EditProjectModal project={project} employees={employees} clientOptions={clientOptions} editorRole={myRole} onUpdated={refresh} />
+                  {myRole === 'HR' && <ConfirmDialog
                     title="Supprimer le projet"
                     description={`Supprimer le projet ${project.name} ? Il sera suspendu et masque de la liste active.`}
                     confirmLabel="Supprimer"
@@ -416,7 +375,7 @@ export default function ProjectDetailPage() {
                         Supprimer
                       </DangerButton>
                     }
-                  />
+                  />}
                 </div>
               ) : undefined
             }
@@ -469,7 +428,7 @@ export default function ProjectDetailPage() {
           {project.sites.length === 0 ? (
             <p className="text-sm text-mutedText">Aucun site rattache a ce projet.</p>
           ) : (
-            <DataTable columns={columns} data={project.sites} />
+            <DataTable columns={columns} data={project.sites} getRowHref={(site) => `/projects/${project.id}/sites/${site.id}`} />
           )}
         </section>
       </div>

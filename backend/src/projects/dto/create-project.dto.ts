@@ -16,10 +16,9 @@ export class CreateProjectDto {
   @IsString()
   clientName?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
+  @ApiProperty()
   @IsString()
-  projectManagerId?: string;
+  projectManagerId!: string;
 
   @ApiPropertyOptional()
   @IsOptional()

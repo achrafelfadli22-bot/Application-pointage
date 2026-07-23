@@ -7,6 +7,7 @@ import { TopBar } from './top-bar';
 import { MobileDrawer } from './mobile-drawer';
 import { tokenStore } from '@/lib/api-client';
 import { PageSkeleton } from '@/components/ui/skeleton';
+import { NAV_ITEMS } from '@/lib/nav-items';
 
 export function AppShell({
   children,
@@ -28,6 +29,15 @@ export function AppShell({
       router.replace('/login');
       return;
     }
+    const role = tokenStore.session?.role;
+    const protectedItem = NAV_ITEMS
+      .filter((item) => pathname === item.href || pathname?.startsWith(`${item.href}/`))
+      .sort((a, b) => b.href.length - a.href.length)[0];
+    if (role && protectedItem && !(protectedItem.roles as readonly string[]).includes(role)) {
+      setReady(false);
+      router.replace(role === 'SUPER_ADMIN' ? '/admin/tenants' : '/dashboard');
+      return;
+    }
     setReady(true);
   }, [pathname, router]);
 
@@ -38,21 +48,21 @@ export function AppShell({
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-pageBg">
+      <div className="flex min-h-dvh items-center justify-center bg-pageBg">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen bg-pageBg">
+    <div className="flex min-h-dvh bg-pageBg">
       {/* Sidebar desktop */}
       <Sidebar />
 
       {/* Drawer mobile */}
       <MobileDrawer open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col lg:ml-[240px]">
         <TopBar onMenuOpen={() => setMobileMenuOpen(true)} />
         <main className="flex-1 p-6 lg:p-8">
           {loading ? <PageSkeleton {...skeletonProps} /> : children}

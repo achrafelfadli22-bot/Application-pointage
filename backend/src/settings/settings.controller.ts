@@ -6,7 +6,6 @@ import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUserContext } from '../common/types';
 import { CreateHolidayDto } from './dto/create-holiday.dto';
 import { CreateLeaveTypeDto } from './dto/create-leave-type.dto';
-import { UpdateAttendanceDto } from './dto/update-attendance.dto';
 import { UpdateCompanyDto } from './dto/update-company.dto';
 import { UpdateHolidayDto } from './dto/update-holiday.dto';
 import { UpdateLeaveTypeDto } from './dto/update-leave-type.dto';
@@ -74,7 +73,7 @@ export class SettingsController {
   }
 
   @Put('timesheet-task-types')
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.HR)
   updateTimesheetTaskTypes(@CurrentUser() user: CurrentUserContext, @Body() dto: UpdateTimesheetTaskTypesDto) {
     return this.service.updateTimesheetTaskTypes(user, dto);
   }
@@ -86,7 +85,7 @@ export class SettingsController {
   }
 
   @Put('timesheet')
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.HR)
   updateTimesheetSettings(@CurrentUser() user: CurrentUserContext, @Body() dto: UpdateTimesheetSettingsDto) {
     return this.service.updateTimesheetSettings(user, dto);
   }
@@ -98,18 +97,9 @@ export class SettingsController {
   }
 
   @Put('site-options')
-  @Roles(UserRole.RESOURCE_MANAGER)
+  @Roles(UserRole.HR)
   updateSiteOptions(@CurrentUser() user: CurrentUserContext, @Body() dto: UpdateSiteOptionsDto) {
     return this.service.updateSiteOptions(user, dto);
   }
 
-  @Get('attendance')
-  attendanceSettings(@CurrentUser() user: CurrentUserContext) {
-    return this.service.attendanceSettings(user);
-  }
-
-  @Put('attendance')
-  updateAttendanceSettings(@CurrentUser() user: CurrentUserContext, @Body() dto: UpdateAttendanceDto) {
-    return this.service.updateAttendanceSettings(user, dto);
-  }
 }

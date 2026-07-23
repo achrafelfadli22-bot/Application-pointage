@@ -65,7 +65,7 @@ export class EmployeesService {
             status: true,
             managedSites: {
               where: { tenantId: user.tenantId ?? '__missing__', deletedAt: null },
-              select: { id: true, code: true, name: true, city: true },
+              select: { id: true, code: true, name: true, address: true },
               orderBy: { name: 'asc' },
             },
             siteAssignments: {
@@ -73,12 +73,12 @@ export class EmployeesService {
                 tenantId: user.tenantId ?? '__missing__',
                 ...this.hierarchy.activeAssignmentWhere(),
               },
-              select: { site: { select: { id: true, code: true, name: true, city: true } } },
+              select: { site: { select: { id: true, code: true, name: true, address: true } } },
               orderBy: { site: { name: 'asc' } },
             },
           },
         },
-        mainSite: { select: { id: true, code: true, name: true, city: true } },
+        mainSite: { select: { id: true, code: true, name: true, address: true } },
       },
       orderBy: [{ user: { firstName: 'asc' } }, { user: { lastName: 'asc' } }],
     });
@@ -113,7 +113,10 @@ export class EmployeesService {
     if (!user.tenantId) {
       throw new ForbiddenException('Tenant scope is required');
     }
-    const creationRole = UserRole.EMPLOYEE;
+    if (dto.role !== UserRole.EMPLOYEE && dto.role !== UserRole.RESOURCE_MANAGER) {
+      throw new ForbiddenException("Le RH peut creer uniquement un employe ou un Ressource Manager.");
+    }
+    const creationRole = dto.role;
 
     const passwordSetupRequired = !dto.password;
     const rawPassword = dto.password ?? this.generateTemporaryPassword();
@@ -165,8 +168,13 @@ export class EmployeesService {
     if (!employee) {
       throw new NotFoundException('Employee not found');
     }
-    if (user.role === UserRole.HR && dto.role && dto.role !== employee.user.role) {
-      throw new ForbiddenException("Le RH ne peut pas attribuer les roles applicatifs.");
+    if (
+      user.role === UserRole.HR &&
+      dto.role &&
+      dto.role !== UserRole.EMPLOYEE &&
+      dto.role !== UserRole.RESOURCE_MANAGER
+    ) {
+      throw new ForbiddenException("Le RH peut attribuer uniquement les statuts Employe et Ressource Manager.");
     }
     if (user.role === UserRole.RESOURCE_MANAGER && dto.role) {
       if (
@@ -192,6 +200,7 @@ export class EmployeesService {
               firstName: dto.firstName,
               lastName: dto.lastName,
               phone: dto.phone,
+              role: dto.role,
             }
           : { role: dto.role },
       profileData:
@@ -238,9 +247,10 @@ export class EmployeesService {
     if (
       employee.user.role !== UserRole.EMPLOYEE &&
       employee.user.role !== UserRole.MANAGER &&
-      employee.user.role !== UserRole.PROJECT_MANAGER
+      employee.user.role !== UserRole.PROJECT_MANAGER &&
+      employee.user.role !== UserRole.RESOURCE_MANAGER
     ) {
-      throw new ForbiddenException('Le RH peut supprimer uniquement les profils operationnels.');
+      throw new ForbiddenException('Le compte RH ne peut pas etre supprime.');
     }
 
     const deleted = await this.repository.deactivateEmployee(employee, new Date());

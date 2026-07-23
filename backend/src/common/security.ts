@@ -31,7 +31,7 @@ export function configureSecurity(app: INestApplication, config: ConfigService) 
     response.setHeader('X-Frame-Options', 'DENY');
     response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     response.setHeader('Cross-Origin-Resource-Policy', 'same-site');
-    response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+    response.setHeader('Permissions-Policy', 'camera=(), microphone=()');
     response.setHeader(
       'Content-Security-Policy',
       request.path.startsWith('/api/docs')

@@ -1,13 +1,9 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { ClipboardList } from 'lucide-react';
 import { BookingModal } from '@/components/domain/booking-modal';
 import { TimeOffCalendar, type TimeOffCalendarEvent } from '@/components/domain/time-off-calendar';
 import { AppShell } from '@/components/layout/app-shell';
 import { PageHeader } from '@/components/layout/page-header';
-import { SelectField } from '@/components/ui/form-fields';
 import { api, tokenStore } from '@/lib/api-client';
 import { useApiData } from '@/lib/use-api-data';
 
@@ -63,9 +59,6 @@ function fullName(user: { firstName: string; lastName: string }) {
 
 export default function TimeOffPage() {
   const sessionUser = tokenStore.session?.user;
-  const myRole = tokenStore.session?.role ?? '';
-  const canManageRequests = ['MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'].includes(myRole);
-  const [selectedUserId, setSelectedUserId] = useState(sessionUser?.id ?? '');
 
   const { data: balances } = useApiData<Balance[]>(
     () => api.leaveBalances() as Promise<Balance[]>,
@@ -73,59 +66,15 @@ export default function TimeOffPage() {
   );
 
   const { data: leaves } = useApiData<LeaveRequest[]>(
-    () => api.leaveRequests() as Promise<LeaveRequest[]>,
+    () => api.leaveRequests('mine') as Promise<LeaveRequest[]>,
     [],
   );
 
-  const { data: employees } = useApiData<Employee[]>(
-    () => (canManageRequests ? api.employees() as Promise<Employee[]> : Promise.resolve([])),
-    [],
-  );
+  const selectedPerson = sessionUser
+    ? { id: sessionUser.id, name: sessionUser.fullName || fullName(sessionUser), email: sessionUser.email }
+    : undefined;
 
-  const people = useMemo(() => {
-    const byId = new Map<string, CalendarPerson>();
-
-    if (sessionUser) {
-      byId.set(sessionUser.id, {
-        id: sessionUser.id,
-        name: sessionUser.fullName || fullName(sessionUser),
-        email: sessionUser.email,
-      });
-    }
-
-    if (canManageRequests) {
-      for (const employee of employees) {
-        if (employee.status !== 'ACTIVE') continue;
-        byId.set(employee.user.id, {
-          id: employee.user.id,
-          name: fullName(employee.user),
-          email: employee.user.email,
-        });
-      }
-
-      for (const leave of leaves) {
-        byId.set(leave.user.id, {
-          id: leave.user.id,
-          name: fullName(leave.user),
-          email: leave.user.email,
-        });
-      }
-    }
-
-    return Array.from(byId.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [canManageRequests, employees, leaves, sessionUser]);
-
-  useEffect(() => {
-    if (selectedUserId && people.some((person) => person.id === selectedUserId)) {
-      return;
-    }
-    setSelectedUserId(sessionUser?.id ?? people[0]?.id ?? '');
-  }, [people, selectedUserId, sessionUser?.id]);
-
-  const selectedPerson = people.find((person) => person.id === selectedUserId);
-  const selectedLeaves = leaves.filter((leave) => leave.user.id === selectedUserId);
-
-  const calendarEvents: TimeOffCalendarEvent[] = selectedLeaves.flatMap((leave) =>
+  const calendarEvents: TimeOffCalendarEvent[] = leaves.flatMap((leave) =>
     expandDates(leave.startDate, leave.endDate).map((date) => ({
       date,
       label: leave.leaveType?.name ?? 'Conge',
@@ -134,9 +83,8 @@ export default function TimeOffPage() {
   );
 
   const currentYear = new Date().getFullYear();
-  const personBalances = balances.filter((balance) => !selectedUserId || balance.user?.id === selectedUserId);
   const deduped = Object.values(
-    personBalances.reduce<Record<string, Balance>>((acc, balance) => {
+    balances.reduce<Record<string, Balance>>((acc, balance) => {
       const key = balance.leaveType.name;
       if (!acc[key] || balance.year > acc[key]!.year) acc[key] = balance;
       return acc;
@@ -148,38 +96,9 @@ export default function TimeOffPage() {
       <div className="grid gap-6">
         <PageHeader
           title="Conges"
-          description="Soldes, calendrier personnel et demandes de congés."
-          actions={
-            <div className="flex items-center gap-2">
-              {canManageRequests && (
-                <Link
-                  href="/time-off/requests"
-                  className="flex h-9 items-center gap-2 rounded-lg border border-borderSoft bg-surface px-3 text-sm font-medium text-bodyText shadow-card transition-colors hover:bg-surfaceHover"
-                >
-                  <ClipboardList className="h-4 w-4 text-hintText" />
-                  Gerer les demandes
-                </Link>
-              )}
-              <BookingModal />
-            </div>
-          }
+          description="Mes soldes, mon calendrier et mes demandes de congé."
+          actions={<BookingModal />}
         />
-
-        {canManageRequests && people.length > 0 && (
-          <div className="rounded-xl border border-borderSoft bg-surface p-4 shadow-card">
-            <SelectField
-              label="Calendrier de"
-              value={selectedUserId}
-              onChange={(event) => setSelectedUserId(event.target.value)}
-            >
-              {people.map((person) => (
-                <option key={person.id} value={person.id}>
-                  {person.name}{person.email ? ` - ${person.email}` : ''}
-                </option>
-              ))}
-            </SelectField>
-          </div>
-        )}
 
         {deduped.length > 0 && (
           <div className="overflow-hidden rounded-xl border border-borderSoft bg-surface shadow-card">
