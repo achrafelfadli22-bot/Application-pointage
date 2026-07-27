@@ -188,6 +188,8 @@ export const api = {
   planningScope: () => apiRequest('/planning/scope'),
   planningMyPeriod: (start: string, end: string, projectId?: string) =>
     apiRequest(`/planning/my-period?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}${projectId ? `&projectId=${encodeURIComponent(projectId)}` : ''}`),
+  savePlanningPeriod: (data: Record<string, unknown>) =>
+    apiRequest('/planning/my-period', { method: 'PUT', body: JSON.stringify(data) }),
   planning: (id: string) => apiRequest(`/planning/${id}`),
   createPlanning: (data: Record<string, unknown>) =>
     apiRequest('/planning', { method: 'POST', body: JSON.stringify(data) }),

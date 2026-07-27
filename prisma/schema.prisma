@@ -285,7 +285,6 @@ model SiteAssignment {
   userId     String
   startDate  DateTime @db.Date
   endDate    DateTime? @db.Date
-  roleOnSite String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -641,7 +640,6 @@ model TenantSettings {
   overtimeTriggerHours Int      @default(8)
   timesheetPeriodDays  Int      @default(7)
   timesheetTaskTypes   Json     @default("[]")
-  siteRoleOptions      Json     @default("[]")
   clientOptions        Json     @default("[]")
   jobTitleOptions      Json     @default("[]")
   updatedAt            DateTime @updatedAt

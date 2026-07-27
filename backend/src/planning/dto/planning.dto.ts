@@ -61,3 +61,13 @@ export class UpdatePlanningDto {
   @Type(() => PlanningLineDto)
   lines!: PlanningLineDto[];
 }
+
+export class SavePlanningPeriodDto extends UpdatePlanningDto {
+  @ApiProperty()
+  @IsDateString()
+  periodStart!: string;
+
+  @ApiProperty()
+  @IsDateString()
+  periodEnd!: string;
+}

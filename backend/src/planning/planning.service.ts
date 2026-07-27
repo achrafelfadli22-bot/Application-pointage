@@ -1,9 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
-import { LeaveRequestStatus, PlanningStatus, Prisma } from '@prisma/client';
+import { LeaveRequestStatus, PlanningStatus, Prisma, UserRole } from '@prisma/client';
 import { AuditLogService } from '../audit-log/audit-log.service';
 import { CurrentUserContext } from '../common/types';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreatePlanningDto, UpdatePlanningDto } from './dto/planning.dto';
+import { CreatePlanningDto, SavePlanningPeriodDto, UpdatePlanningDto } from './dto/planning.dto';
 
 @Injectable()
 export class PlanningService {
@@ -23,7 +23,8 @@ export class PlanningService {
 
   async findAll(user: CurrentUserContext) {
     const lineWhere = await this.viewerLineWhere(user);
-    return this.prisma.planning.findMany({
+    const [plannings, managedSite] = await Promise.all([
+      this.prisma.planning.findMany({
       where: await this.readScope(user),
       include: {
         createdBy: { select: { id: true, firstName: true, lastName: true } },
@@ -36,7 +37,16 @@ export class PlanningService {
         },
       },
       orderBy: { periodStart: 'desc' },
-    });
+      }),
+      this.prisma.site.findFirst({
+        where: { tenantId: user.tenantId ?? '__missing__', managerId: user.userId, deletedAt: null },
+        select: { id: true },
+      }),
+    ]);
+    return plannings.map((planning) => ({
+      ...planning,
+      permissions: { canManage: Boolean(managedSite) && planning.createdById === user.userId },
+    }));
   }
 
   async scopeOptions(user: CurrentUserContext) {
@@ -74,6 +84,7 @@ export class PlanningService {
       projects,
       sites,
       isProjectManager: Boolean(managedProject),
+      canViewAll: user.role === UserRole.RESOURCE_MANAGER || user.role === UserRole.HR,
       timesheetPeriod: settings.timesheetPeriodDays === 30 ? 'MONTHLY' : 'WEEKLY',
       timesheetPeriodDays: settings.timesheetPeriodDays,
     };
@@ -121,42 +132,61 @@ export class PlanningService {
           select: { userId: true, startDate: true, endDate: true },
         })
       : [];
-    return { ...planning, approvedLeaves };
+    const canManage = planning.createdById === user.userId && Boolean(
+      await this.prisma.site.findFirst({
+        where: { tenantId: planning.tenantId, managerId: user.userId, deletedAt: null },
+        select: { id: true },
+      }),
+    );
+    return { ...planning, approvedLeaves, permissions: { canManage } };
   }
 
   private async readScope(user: CurrentUserContext): Promise<Prisma.PlanningWhereInput> {
     if (!user.tenantId) throw new ForbiddenException('Tenant scope is required');
-    const managedSite = await this.prisma.site.findFirst({
-      where: { tenantId: user.tenantId, managerId: user.userId, deletedAt: null },
-      select: { id: true },
-    });
-    if (managedSite) {
-      return { tenantId: user.tenantId, createdById: user.userId };
+    const isTenantViewer = user.role === UserRole.RESOURCE_MANAGER || user.role === UserRole.HR;
+    const [managedSite, managedProject] = await Promise.all([
+      this.prisma.site.findFirst({
+        where: { tenantId: user.tenantId, managerId: user.userId, deletedAt: null },
+        select: { id: true },
+      }),
+      this.prisma.project.findFirst({
+        where: { tenantId: user.tenantId, projectManagerId: user.userId, deletedAt: null },
+        select: { id: true },
+      }),
+    ]);
+
+    const visible: Prisma.PlanningWhereInput[] = [];
+    if (managedSite) visible.push({ createdById: user.userId });
+    if (isTenantViewer) {
+      visible.push({ status: PlanningStatus.PUBLISHED });
+    } else {
+      const lineScopes: Prisma.PlanningLineWhereInput[] = [];
+      if (managedSite) lineScopes.push({ site: { managerId: user.userId } });
+      if (managedProject) lineScopes.push({ site: { project: { projectManagerId: user.userId } } });
+      if (lineScopes.length) {
+        visible.push({
+          status: PlanningStatus.PUBLISHED,
+          lines: { some: lineScopes.length === 1 ? lineScopes[0]! : { OR: lineScopes } },
+        });
+      }
     }
-    const managedProject = await this.prisma.project.findFirst({
-      where: { tenantId: user.tenantId, projectManagerId: user.userId, deletedAt: null },
-      select: { id: true },
-    });
-    if (managedProject) {
-      return {
-        tenantId: user.tenantId,
-        status: PlanningStatus.PUBLISHED,
-        lines: { some: { site: { project: { projectManagerId: user.userId } } } },
-      };
+    if (!visible.length) {
+      visible.push({ status: PlanningStatus.PUBLISHED, lines: { some: { userId: user.userId } } });
     }
-    return {
-      tenantId: user.tenantId,
-      status: PlanningStatus.PUBLISHED,
-      lines: { some: { userId: user.userId } },
-    };
+    return { tenantId: user.tenantId, OR: visible };
   }
 
   private async viewerLineWhere(user: CurrentUserContext): Promise<Prisma.PlanningLineWhereInput | undefined> {
     if (!user.tenantId) return { userId: user.userId };
-    const isSiteManager = await this.prisma.site.findFirst({ where: { tenantId: user.tenantId, managerId: user.userId, deletedAt: null }, select: { id: true } });
-    if (isSiteManager) return undefined;
-    const isProjectManager = await this.prisma.project.findFirst({ where: { tenantId: user.tenantId, projectManagerId: user.userId, deletedAt: null }, select: { id: true } });
-    if (isProjectManager) return { site: { project: { projectManagerId: user.userId } } };
+    if (user.role === UserRole.RESOURCE_MANAGER || user.role === UserRole.HR) return undefined;
+    const [isSiteManager, isProjectManager] = await Promise.all([
+      this.prisma.site.findFirst({ where: { tenantId: user.tenantId, managerId: user.userId, deletedAt: null }, select: { id: true } }),
+      this.prisma.project.findFirst({ where: { tenantId: user.tenantId, projectManagerId: user.userId, deletedAt: null }, select: { id: true } }),
+    ]);
+    const scopes: Prisma.PlanningLineWhereInput[] = [];
+    if (isSiteManager) scopes.push({ site: { managerId: user.userId } });
+    if (isProjectManager) scopes.push({ site: { project: { projectManagerId: user.userId } } });
+    if (scopes.length) return scopes.length === 1 ? scopes[0]! : { OR: scopes };
     return { userId: user.userId };
   }
 
@@ -167,19 +197,44 @@ export class PlanningService {
     if (!start || !end || Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime()) || periodEnd < periodStart) {
       throw new BadRequestException('Periode de consultation invalide.');
     }
-    const managedProject = projectId
+    const isTenantViewer = user.role === UserRole.RESOURCE_MANAGER || user.role === UserRole.HR;
+    const requestedProject = projectId
       ? await this.prisma.project.findFirst({
-          where: { id: projectId, tenantId: user.tenantId, projectManagerId: user.userId, deletedAt: null },
+          where: {
+            id: projectId,
+            tenantId: user.tenantId,
+            deletedAt: null,
+            ...(isTenantViewer
+              ? {}
+              : {
+                  OR: [
+                    { projectManagerId: user.userId },
+                    { sites: { some: { managerId: user.userId, deletedAt: null } } },
+                  ],
+                }),
+          },
           select: { id: true },
         })
       : null;
-    const lineWhere: Prisma.PlanningLineWhereInput = managedProject
-      ? { site: { project: { id: managedProject.id, projectManagerId: user.userId } } }
-      : (await this.viewerLineWhere(user)) ?? { userId: user.userId };
+    if (projectId && !requestedProject) {
+      throw new ForbiddenException('Vous ne pouvez pas consulter la planification de ce projet.');
+    }
+    const viewerWhere = await this.viewerLineWhere(user);
+    const lineWhere: Prisma.PlanningLineWhereInput = requestedProject
+      ? {
+          AND: [
+            { site: { projectId: requestedProject.id } },
+            ...(viewerWhere ? [viewerWhere] : []),
+          ],
+        }
+      : viewerWhere ?? {};
     const plannings = await this.prisma.planning.findMany({
       where: {
         tenantId: user.tenantId,
-        status: PlanningStatus.PUBLISHED,
+        OR: [
+          { status: PlanningStatus.PUBLISHED },
+          { createdById: user.userId },
+        ],
         periodStart: { lte: periodEnd },
         periodEnd: { gte: periodStart },
         lines: { some: lineWhere },
@@ -200,13 +255,34 @@ export class PlanningService {
       },
       orderBy: { periodStart: 'asc' },
     });
-    const lines = plannings.flatMap((planning) => planning.lines);
-    const plannedUserIds = [...new Set(lines.map((line) => line.userId))];
-    const approvedLeaves = plannedUserIds.length
+    const managedSiteIds = new Set((await this.prisma.site.findMany({
+      where: { tenantId: user.tenantId, managerId: user.userId, deletedAt: null },
+      select: { id: true },
+    })).map((site) => site.id));
+    const lines = plannings.flatMap((planning) => planning.lines.map((line) => ({
+      ...line,
+      permissions: { canEdit: planning.createdById === user.userId && managedSiteIds.has(line.siteId) },
+    })));
+    const editableAssignmentUserIds = managedSiteIds.size
+      ? (await this.prisma.siteAssignment.findMany({
+          where: {
+            tenantId: user.tenantId,
+            siteId: { in: [...managedSiteIds] },
+            startDate: { lte: periodEnd },
+            OR: [{ endDate: null }, { endDate: { gte: periodStart } }],
+          },
+          select: { userId: true },
+        })).map((assignment) => assignment.userId)
+      : [];
+    const visibleUserIds = [...new Set([
+      ...lines.map((line) => line.userId),
+      ...editableAssignmentUserIds,
+    ])];
+    const approvedLeaves = visibleUserIds.length
       ? await this.prisma.leaveRequest.findMany({
           where: {
             tenantId: user.tenantId,
-            userId: { in: plannedUserIds },
+            userId: { in: visibleUserIds },
             status: LeaveRequestStatus.APPROVED,
             startDate: { lte: periodEnd },
             endDate: { gte: periodStart },
@@ -222,7 +298,127 @@ export class PlanningService {
       project: projectId ? lines.find((line) => line.site.project)?.site.project ?? null : null,
       lines,
       approvedLeaves,
+      permissions: { canAdd: managedSiteIds.size > 0 },
     };
+  }
+
+  async saveViewerPeriod(user: CurrentUserContext, dto: SavePlanningPeriodDto) {
+    if (!user.tenantId) throw new ForbiddenException('Tenant scope is required');
+    const periodStart = new Date(dto.periodStart);
+    const periodEnd = new Date(dto.periodEnd);
+    if (Number.isNaN(periodStart.getTime()) || Number.isNaN(periodEnd.getTime()) || periodEnd < periodStart) {
+      throw new BadRequestException('Période de planification invalide.');
+    }
+
+    const managedSites = await this.prisma.site.findMany({
+      where: { tenantId: user.tenantId, managerId: user.userId, deletedAt: null },
+      select: { id: true },
+    });
+    const managedSiteIds = new Set(managedSites.map((site) => site.id));
+    if (!managedSiteIds.size) {
+      throw new ForbiddenException('Seul un chef de site peut modifier la planification.');
+    }
+    const uniqueLines = [...new Map(dto.lines.map((line) => {
+      const entriesSignature = [...line.entries]
+        .sort((a, b) => a.entryDate.localeCompare(b.entryDate))
+        .map((entry) => `${entry.entryDate}:${entry.hours}:${entry.comment ?? ''}`)
+        .join('|');
+      const signature = [
+        line.siteId,
+        line.userId,
+        line.activity ?? '',
+        line.taskName.trim(),
+        entriesSignature,
+      ].join('::');
+      return [signature, line] as const;
+    })).values()];
+
+    for (const line of uniqueLines) {
+      if (!managedSiteIds.has(line.siteId)) {
+        throw new ForbiddenException('Vous ne pouvez modifier que les lignes de vos sites.');
+      }
+      const assignment = await this.prisma.siteAssignment.findFirst({
+        where: {
+          tenantId: user.tenantId,
+          siteId: line.siteId,
+          userId: line.userId,
+          startDate: { lte: periodEnd },
+          OR: [{ endDate: null }, { endDate: { gte: periodStart } }],
+        },
+        select: { id: true },
+      });
+      if (!assignment) throw new BadRequestException("Cet employé n'est pas affecté au site sélectionné.");
+      for (const entry of line.entries) {
+        const entryDate = new Date(entry.entryDate);
+        if (entryDate < periodStart || entryDate > periodEnd) {
+          throw new BadRequestException('Une date se trouve hors de la période.');
+        }
+      }
+    }
+
+    const planning = await this.prisma.planning.upsert({
+      where: {
+        tenantId_createdById_periodStart_periodEnd: {
+          tenantId: user.tenantId,
+          createdById: user.userId,
+          periodStart,
+          periodEnd,
+        },
+      },
+      create: {
+        tenantId: user.tenantId,
+        createdById: user.userId,
+        periodStart,
+        periodEnd,
+        status: PlanningStatus.PUBLISHED,
+        publishedAt: new Date(),
+      },
+      update: { status: PlanningStatus.PUBLISHED, publishedAt: new Date() },
+    });
+
+    await this.prisma.$transaction(async (tx) => {
+      // L'ancienne interface pouvait créer plusieurs feuilles du même auteur
+      // qui chevauchaient la période. Elles ne doivent plus alimenter la vue
+      // consolidée une fois la période courante sauvegardée.
+      await tx.planning.deleteMany({
+        where: {
+          tenantId: user.tenantId!,
+          createdById: user.userId,
+          id: { not: planning.id },
+          periodStart: { lte: periodEnd },
+          periodEnd: { gte: periodStart },
+        },
+      });
+      await tx.planningLine.deleteMany({ where: { planningId: planning.id } });
+      for (const line of uniqueLines) {
+        await tx.planningLine.create({
+          data: {
+            tenantId: user.tenantId!,
+            planningId: planning.id,
+            userId: line.userId,
+            siteId: line.siteId,
+            taskName: line.taskName,
+            activity: line.activity,
+            entries: {
+              create: line.entries.map((entry) => ({
+                tenantId: user.tenantId!,
+                entryDate: new Date(entry.entryDate),
+                hours: entry.hours,
+                comment: entry.comment,
+              })),
+            },
+          },
+        });
+      }
+    });
+    await this.auditLog.log({
+      tenantId: user.tenantId,
+      userId: user.userId,
+      action: 'planning.period.saved',
+      entityType: 'Planning',
+      entityId: planning.id,
+    });
+    return this.findViewerPeriod(user, dto.periodStart, dto.periodEnd);
   }
 
   async create(user: CurrentUserContext, dto: CreatePlanningDto) {

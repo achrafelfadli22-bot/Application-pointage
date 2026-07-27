@@ -152,7 +152,7 @@ export class SettingsService {
     const tenantId = this.requireTenant(user);
     const settings = await this.prisma.tenantSettings.upsert({
       where: { tenantId },
-      create: { tenantId, siteRoleOptions: EMPTY_OPTIONS, jobTitleOptions: EMPTY_OPTIONS },
+      create: { tenantId, jobTitleOptions: EMPTY_OPTIONS },
       update: {},
     });
 
@@ -168,7 +168,6 @@ export class SettingsService {
     const configuredJobTitles = this.normalizeStringOptions(settings.jobTitleOptions, EMPTY_OPTIONS);
 
     return {
-      siteRoleOptions: this.normalizeStringOptions(settings.siteRoleOptions, EMPTY_OPTIONS),
       clientOptions: this.normalizeStringOptions([...configuredClients, ...existingClients], []),
       jobTitleOptions: configuredJobTitles,
     };
@@ -178,13 +177,9 @@ export class SettingsService {
     const tenantId = this.requireTenant(user);
     const current = await this.prisma.tenantSettings.upsert({
       where: { tenantId },
-      create: { tenantId, siteRoleOptions: EMPTY_OPTIONS, jobTitleOptions: EMPTY_OPTIONS },
+      create: { tenantId, jobTitleOptions: EMPTY_OPTIONS },
       update: {},
     });
-    const siteRoleOptions =
-      dto.siteRoleOptions === undefined
-        ? this.normalizeStringOptions(current.siteRoleOptions, EMPTY_OPTIONS)
-        : this.normalizeStringOptions(dto.siteRoleOptions, EMPTY_OPTIONS, true, 'role sur site');
     const clientOptions =
       dto.clientOptions === undefined
         ? this.normalizeStringOptions(current.clientOptions, [])
@@ -197,14 +192,12 @@ export class SettingsService {
     const settings = await this.prisma.tenantSettings.update({
       where: { tenantId },
       data: {
-        ...(dto.siteRoleOptions !== undefined && { siteRoleOptions }),
         ...(dto.clientOptions !== undefined && { clientOptions }),
         ...(dto.jobTitleOptions !== undefined && { jobTitleOptions }),
       },
     });
 
     return {
-      siteRoleOptions: this.normalizeStringOptions(settings.siteRoleOptions, EMPTY_OPTIONS),
       clientOptions: this.normalizeStringOptions(settings.clientOptions, []),
       jobTitleOptions: this.normalizeStringOptions(settings.jobTitleOptions, EMPTY_OPTIONS),
     };

@@ -21,7 +21,7 @@ type Employee = {
   status: string;
   user: { id: string; firstName: string; lastName: string; email: string; role: string; status?: string };
 };
-type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[] };
+type SiteOptions = { clientOptions: string[] };
 
 type ProjectSite = {
   id: string;
@@ -326,7 +326,7 @@ export default function ProjectDetailPage() {
   );
   const { data: siteOptions } = useApiData<SiteOptions>(
     () => api.settingsSiteOptions() as Promise<SiteOptions>,
-    { siteRoleOptions: [], clientOptions: [] },
+    { clientOptions: [] },
   );
   const clientOptions = Array.from(
     new Set(

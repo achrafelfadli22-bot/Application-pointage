@@ -31,7 +31,7 @@ type Employee = {
   status: string;
   user: { id: string; firstName: string; lastName: string; email: string; role: string; status: string };
 };
-type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[] };
+type SiteOptions = { clientOptions: string[] };
 
 const emptyForm = {
   code: '',
@@ -150,7 +150,7 @@ export default function ProjectsPage() {
   const { data, refresh } = useApiData<Project[]>(() => api.projects() as Promise<Project[]>, []);
   const { data: siteOptions } = useApiData<SiteOptions>(
     () => api.settingsSiteOptions() as Promise<SiteOptions>,
-    { siteRoleOptions: [], clientOptions: [] },
+    { clientOptions: [] },
   );
   const myRole = tokenStore.session?.role ?? '';
   const canCreate = myRole === 'HR';

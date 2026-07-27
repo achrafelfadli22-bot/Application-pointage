@@ -20,7 +20,6 @@ import { useApiData } from '@/lib/use-api-data';
 
 type Assignment = {
   id: string;
-  roleOnSite?: string;
   startDate: string;
   endDate?: string;
   user: {
@@ -39,8 +38,6 @@ type Employee = {
   status: string;
   user: { id: string; firstName: string; lastName: string; email: string; role: string; status?: string };
 };
-
-type SiteOptions = { siteRoleOptions: string[] };
 
 type Project = {
   id: string;
@@ -91,8 +88,6 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 function todayDate() {
   return new Date().toISOString().slice(0, 10);
 }
-
-const DEFAULT_SITE_ROLE_OPTIONS: string[] = [];
 
 function EditSiteModal({
   site,
@@ -215,51 +210,21 @@ function AssignEmployeeModal({
   siteId,
   assignments,
   employees,
-  siteRoleOptions,
   onAssigned,
 }: {
   siteId: string;
   assignments: Assignment[];
   employees: Employee[];
-  siteRoleOptions: string[];
   onAssigned: () => void;
 }) {
-  const roleOptions = useMemo(() => {
-    const configuredOptions = siteRoleOptions.length ? siteRoleOptions : DEFAULT_SITE_ROLE_OPTIONS;
-    const seen = new Set<string>();
-    const options: string[] = [];
-
-    for (const role of configuredOptions) {
-      const value = role.trim();
-      if (!value) continue;
-
-      const key = value.toLocaleLowerCase('fr-FR');
-      if (seen.has(key)) continue;
-
-      seen.add(key);
-      options.push(value);
-    }
-
-    return options.length ? options : DEFAULT_SITE_ROLE_OPTIONS;
-  }, [siteRoleOptions]);
-  const defaultRoleOnSite = roleOptions.includes('Technicien') ? 'Technicien' : roleOptions[0] ?? '';
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     userId: '',
     startDate: todayDate(),
     endDate: '',
-    roleOnSite: defaultRoleOnSite,
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setForm((previous) =>
-      previous.roleOnSite && roleOptions.includes(previous.roleOnSite)
-        ? previous
-        : { ...previous, roleOnSite: defaultRoleOnSite },
-    );
-  }, [defaultRoleOnSite, roleOptions]);
 
   const activeAssignedUserIds = useMemo(
     () =>
@@ -280,7 +245,7 @@ function AssignEmployeeModal({
     );
 
   function reset() {
-    setForm({ userId: '', startDate: todayDate(), endDate: '', roleOnSite: defaultRoleOnSite });
+    setForm({ userId: '', startDate: todayDate(), endDate: '' });
     setError(null);
     setSubmitting(false);
   }
@@ -297,7 +262,6 @@ function AssignEmployeeModal({
       const payload: Record<string, unknown> = {
         userId: form.userId,
         startDate: form.startDate,
-        roleOnSite: form.roleOnSite || undefined,
       };
       if (form.endDate) {
         payload.endDate = form.endDate;
@@ -369,18 +333,6 @@ function AssignEmployeeModal({
               />
             </div>
 
-            <SelectField
-              label="Role sur site"
-              value={form.roleOnSite}
-              onChange={(event) => setForm((previous) => ({ ...previous, roleOnSite: event.target.value }))}
-            >
-              {roleOptions.map((role) => (
-                <option key={role} value={role}>
-                  {role}
-                </option>
-              ))}
-            </SelectField>
-
             {availableEmployees.length === 0 && (
               <p className="text-sm text-mutedText">Tous les employes actifs disponibles sont deja affectes a ce site.</p>
             )}
@@ -425,11 +377,6 @@ export default function SiteDetailPage() {
     () => (canManageAssignments || myRole === 'HR' ? (api.employees() as Promise<Employee[]>) : Promise.resolve([])),
     [],
   );
-  const { data: siteOptions } = useApiData<SiteOptions>(
-    () => api.settingsSiteOptions() as Promise<SiteOptions>,
-    { siteRoleOptions: DEFAULT_SITE_ROLE_OPTIONS },
-  );
-
   const assignmentColumns: ColumnDef<Assignment, unknown>[] = [
     {
       header: 'Employé',
@@ -451,10 +398,6 @@ export default function SiteDetailPage() {
     {
       header: 'Rôle',
       cell: ({ row }) => ROLE_LABELS[row.original.user.role] ?? row.original.user.role,
-    },
-    {
-      header: 'Rôle sur site',
-      cell: ({ row }) => row.original.roleOnSite ?? '—',
     },
     {
       header: 'Depuis',
@@ -559,7 +502,6 @@ export default function SiteDetailPage() {
                       siteId={site.id}
                       assignments={site.assignments}
                       employees={employees}
-                      siteRoleOptions={siteOptions.siteRoleOptions}
                       onAssigned={refresh}
                     />
                   )}

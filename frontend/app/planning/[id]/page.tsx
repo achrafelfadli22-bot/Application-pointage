@@ -32,6 +32,7 @@ type Planning = {
   status: 'DRAFT' | 'PUBLISHED';
   lines: PlanningLine[];
   approvedLeaves: Array<{ userId: string; startDate: string; endDate: string }>;
+  permissions: { canManage: boolean };
 };
 type EditLine = { projectId: string; projectLabel: string; userId: string; userLabel: string; siteId: string; siteLabel: string; taskName: string; activity: string; hours: Record<string, number> };
 
@@ -54,7 +55,7 @@ export default function PlanningDetailPage() {
   const id = String(useParams<{ id: string }>()?.id ?? '');
   const { data: planning, loading, error, refresh } = useApiData<Planning>(
     () => api.planning(id) as Promise<Planning>,
-    { id: '', periodStart: '', periodEnd: '', status: 'DRAFT', lines: [], approvedLeaves: [] },
+    { id: '', periodStart: '', periodEnd: '', status: 'DRAFT', lines: [], approvedLeaves: [], permissions: { canManage: false } },
     { fallbackMode: 'never' },
   );
   const { data: planningScope, error: scopeError } = useApiData<{ projects: Project[]; sites: Site[] }>(
@@ -62,7 +63,7 @@ export default function PlanningDetailPage() {
     { projects: [], sites: [] },
     { fallbackMode: 'never' },
   );
-  const canManage = planningScope.sites.length > 0;
+  const canManage = planning.permissions.canManage;
   const sites = planningScope.sites;
   const days = useMemo(() => planning.periodStart ? daysBetween(planning.periodStart, planning.periodEnd) : [], [planning.periodStart, planning.periodEnd]);
   const projects = useMemo(

@@ -15,8 +15,4 @@ export class CreateSiteAssignmentDto {
   @IsDateString()
   endDate?: string;
 
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
-  roleOnSite?: string;
 }

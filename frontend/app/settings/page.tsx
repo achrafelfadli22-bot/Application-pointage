@@ -588,9 +588,9 @@ function LeaveTypesTab() {
 type TimesheetTaskTypeForm = TimesheetTaskType;
 type TimesheetPeriodType = 'WEEKLY' | 'MONTHLY';
 type TimesheetSettings = { timesheetPeriod: TimesheetPeriodType; timesheetPeriodDays: number };
-type SiteOptions = { siteRoleOptions: string[]; clientOptions: string[]; jobTitleOptions: string[] };
+type SiteOptions = { clientOptions: string[]; jobTitleOptions: string[] };
 
-type OptionImportKind = 'client' | 'siteRole' | 'jobTitle';
+type OptionImportKind = 'client' | 'jobTitle';
 
 const emptyTimesheetTaskType: TimesheetTaskTypeForm = {
   value: '',
@@ -598,12 +598,10 @@ const emptyTimesheetTaskType: TimesheetTaskTypeForm = {
   isActive: true,
 };
 
-const defaultSiteRoleOptions: string[] = [];
 const defaultJobTitleOptions: string[] = [];
 
 const optionImportHeaders: Record<OptionImportKind, string[]> = {
   client: ['client', 'maitre ouvrage', 'maitre d ouvrage', 'maitre_ouvrage', 'donneur ordre'],
-  siteRole: ['role', 'role site', 'poste site', 'poste sur site', 'fonction site'],
   jobTitle: ['poste', 'poste employe', 'fonction', 'emploi', 'job title'],
 };
 
@@ -1081,10 +1079,8 @@ function TimesheetTaskTypesTab() {
 
 function SiteOptionsTab() {
   const canEdit = tokenStore.session?.role === 'HR';
-  const [siteRoleOptions, setSiteRoleOptions] = useState<string[]>(defaultSiteRoleOptions);
   const [clientOptions, setClientOptions] = useState<string[]>([]);
   const [jobTitleOptions, setJobTitleOptions] = useState<string[]>(defaultJobTitleOptions);
-  const [siteRoleInput, setSiteRoleInput] = useState('');
   const [clientInput, setClientInput] = useState('');
   const [jobTitleInput, setJobTitleInput] = useState('');
   const [loading, setLoading] = useState(true);
@@ -1098,7 +1094,6 @@ function SiteOptionsTab() {
       .settingsSiteOptions()
       .then((data) => {
         const options = data as SiteOptions;
-        setSiteRoleOptions(options.siteRoleOptions?.length ? options.siteRoleOptions : defaultSiteRoleOptions);
         setClientOptions(options.clientOptions ?? []);
         setJobTitleOptions(options.jobTitleOptions?.length ? options.jobTitleOptions : defaultJobTitleOptions);
       })
@@ -1110,20 +1105,17 @@ function SiteOptionsTab() {
     if (!canEdit) return;
     setNotice(null);
 
-    const value = (kind === 'siteRole' ? siteRoleInput : kind === 'client' ? clientInput : jobTitleInput).trim();
+    const value = (kind === 'client' ? clientInput : jobTitleInput).trim();
     if (!value) return;
 
-    const options = kind === 'siteRole' ? siteRoleOptions : kind === 'client' ? clientOptions : jobTitleOptions;
+    const options = kind === 'client' ? clientOptions : jobTitleOptions;
     const duplicate = options.some((option) => option.toLocaleLowerCase('fr-FR') === value.toLocaleLowerCase('fr-FR'));
     if (duplicate) {
       setError('Cette option existe deja.');
       return;
     }
 
-    if (kind === 'siteRole') {
-      setSiteRoleOptions((previous) => [...previous, value]);
-      setSiteRoleInput('');
-    } else if (kind === 'client') {
+    if (kind === 'client') {
       setClientOptions((previous) => [...previous, value]);
       setClientInput('');
     } else {
@@ -1135,13 +1127,13 @@ function SiteOptionsTab() {
 
   function updateOption(kind: OptionImportKind, index: number, value: string) {
     if (!canEdit) return;
-    const setter = kind === 'siteRole' ? setSiteRoleOptions : kind === 'client' ? setClientOptions : setJobTitleOptions;
+    const setter = kind === 'client' ? setClientOptions : setJobTitleOptions;
     setter((previous) => previous.map((option, optionIndex) => (optionIndex === index ? value : option)));
   }
 
   function deleteOption(kind: OptionImportKind, index: number) {
     if (!canEdit) return;
-    const setter = kind === 'siteRole' ? setSiteRoleOptions : kind === 'client' ? setClientOptions : setJobTitleOptions;
+    const setter = kind === 'client' ? setClientOptions : setJobTitleOptions;
     setter((previous) => previous.filter((_, optionIndex) => optionIndex !== index));
   }
 
@@ -1151,14 +1143,8 @@ function SiteOptionsTab() {
       return;
     }
 
-    const cleanedRoles = normalizeOptions(siteRoleOptions);
     const cleanedClients = normalizeOptions(clientOptions);
     const cleanedJobTitles = normalizeOptions(jobTitleOptions);
-
-    if (!cleanedRoles.length) {
-      setError('Au moins un role sur site est requis.');
-      return;
-    }
 
     if (!cleanedJobTitles.length) {
       setError('Au moins un poste employe est requis.');
@@ -1171,11 +1157,9 @@ function SiteOptionsTab() {
     setNotice(null);
     try {
       const updated = (await api.updateSettingsSiteOptions({
-        siteRoleOptions: cleanedRoles,
         clientOptions: cleanedClients,
         jobTitleOptions: cleanedJobTitles,
       })) as SiteOptions;
-      setSiteRoleOptions(updated.siteRoleOptions?.length ? updated.siteRoleOptions : defaultSiteRoleOptions);
       setClientOptions(updated.clientOptions ?? []);
       setJobTitleOptions(updated.jobTitleOptions?.length ? updated.jobTitleOptions : defaultJobTitleOptions);
       setSuccess(true);
@@ -1202,8 +1186,6 @@ function SiteOptionsTab() {
 
       if (kind === 'client') {
         setClientOptions((previous) => mergeOptions(previous, imported));
-      } else if (kind === 'siteRole') {
-        setSiteRoleOptions((previous) => mergeOptions(previous, imported));
       } else {
         setJobTitleOptions((previous) => mergeOptions(previous, imported));
       }
@@ -1220,13 +1202,6 @@ function SiteOptionsTab() {
         { Client: 'Butec' },
         { Client: 'Sphinx' },
         { Client: 'Futura Expertise' },
-      ]);
-      return;
-    }
-
-    if (kind === 'siteRole') {
-      downloadExcelTemplate('modele-postes-site.xlsx', 'Postes site', [
-        { 'Poste site': '' },
       ]);
       return;
     }
@@ -1342,10 +1317,9 @@ function SiteOptionsTab() {
         </div>
       )}
 
-      <div className="grid gap-4 xl:grid-cols-3">
+      <div className="grid gap-4 xl:grid-cols-2">
         {renderOptionGroup("Clients / Maitres d'ouvrage", clientOptions, clientInput, setClientInput, 'client')}
         {renderOptionGroup('Postes employes', jobTitleOptions, jobTitleInput, setJobTitleInput, 'jobTitle')}
-        {renderOptionGroup('Postes sur site', siteRoleOptions, siteRoleInput, setSiteRoleInput, 'siteRole')}
       </div>
 
       <div className="flex items-center gap-3">

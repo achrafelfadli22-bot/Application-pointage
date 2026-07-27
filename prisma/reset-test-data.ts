@@ -37,7 +37,6 @@ async function main() {
     await tx.tenantSettings.updateMany({
       data: {
         timesheetTaskTypes: [],
-        siteRoleOptions: [],
         clientOptions: [],
         jobTitleOptions: [],
       },
@@ -48,13 +47,11 @@ async function main() {
       create: {
         tenantId: tenant.id,
         timesheetTaskTypes: [],
-        siteRoleOptions: [],
         clientOptions: [],
         jobTitleOptions: [],
       },
       update: {
         timesheetTaskTypes: [],
-        siteRoleOptions: [],
         clientOptions: [],
         jobTitleOptions: [],
       },

@@ -30,7 +30,7 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { label: 'Tableau de bord',   href: '/dashboard',            icon: LayoutDashboard, roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
   //{ label: 'Pointage',          href: '/attendance',            icon: Clock4,          roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
   { label: 'Feuilles de temps', href: '/timesheets',            icon: ClipboardList,   roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
-  { label: 'Planification',     href: '/planning',               icon: CalendarRange,   roles: ['MANAGER', 'PROJECT_MANAGER', 'EMPLOYEE'] },
+  { label: 'Planification',     href: '/planning',               icon: CalendarRange,   roles: ['MANAGER', 'PROJECT_MANAGER', 'RESOURCE_MANAGER', 'HR', 'EMPLOYEE'] },
   { label: 'Congés',            href: '/time-off',              icon: CalendarClock,   roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'], exact: true },
   { label: 'Demandes de congé', href: '/time-off/requests',     icon: ClipboardList,   roles: ['EMPLOYEE', 'MANAGER', 'PROJECT_MANAGER', 'HR', 'RESOURCE_MANAGER'] },
 

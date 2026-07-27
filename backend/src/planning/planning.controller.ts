@@ -2,7 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query } from '@nestjs/
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { CurrentUserContext } from '../common/types';
-import { CreatePlanningDto, UpdatePlanningDto } from './dto/planning.dto';
+import { CreatePlanningDto, SavePlanningPeriodDto, UpdatePlanningDto } from './dto/planning.dto';
 import { PlanningService } from './planning.service';
 
 @ApiBearerAuth()
@@ -24,6 +24,12 @@ export class PlanningController {
     @Query('end') end: string,
     @Query('projectId') projectId?: string,
   ) { return this.service.findViewerPeriod(user, start, end, projectId); }
+
+  @Put('my-period')
+  saveMyPeriod(
+    @CurrentUser() user: CurrentUserContext,
+    @Body() dto: SavePlanningPeriodDto,
+  ) { return this.service.saveViewerPeriod(user, dto); }
 
   @Post()
   create(@CurrentUser() user: CurrentUserContext, @Body() dto: CreatePlanningDto) { return this.service.create(user, dto); }
