@@ -121,12 +121,25 @@ function CompanyTab() {
   }, []);
 
   async function handleSave() {
+    if (!form.name.trim() || !form.email.trim()) {
+      setError('Le nom de la société et l’adresse email sont obligatoires.');
+      return;
+    }
     setSaving(true);
     setError(null);
     setSuccess(false);
     try {
-      const updated = await api.updateSettingsCompany(form as unknown as Record<string, unknown>);
+      const payload = {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        phone: form.phone?.trim() || undefined,
+        address: form.address?.trim() || undefined,
+        city: form.city?.trim() || undefined,
+        country: form.country?.trim() || undefined,
+      };
+      const updated = await api.updateSettingsCompany(payload);
       setCompany(updated as Company);
+      setForm(updated as Company);
       setSuccess(true);
       setTimeout(() => setSuccess(false), 3000);
     } catch (e) {
