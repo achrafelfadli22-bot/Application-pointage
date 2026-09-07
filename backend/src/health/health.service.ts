@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
 import { PrismaService } from '../prisma/prisma.service';
 import { StorageService } from '../storage/storage.service';
+import { redisOptions } from '../config/redis';
 
 type HealthStatus = 'ok' | 'degraded';
 type DependencyStatus = 'up' | 'down';
@@ -52,9 +53,7 @@ export class HealthService {
 
   private async redis() {
     const client = new Redis({
-      host: this.config.get<string>('REDIS_HOST') ?? '127.0.0.1',
-      port: Number(this.config.get<string>('REDIS_PORT') ?? 6379),
-      family: 4,
+      ...redisOptions(this.config),
       lazyConnect: true,
       maxRetriesPerRequest: 1,
       retryStrategy: () => null,

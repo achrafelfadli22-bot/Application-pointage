@@ -29,6 +29,7 @@ import { TenantsModule } from './tenants/tenants.module';
 import { TimesheetsModule } from './timesheets/timesheets.module';
 import { UsersModule } from './users/users.module';
 import { validateEnv } from './config/env.validation';
+import { redisOptions } from './config/redis';
 
 @Module({
   imports: [
@@ -41,9 +42,7 @@ import { validateEnv } from './config/env.validation';
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         connection: {
-          host: config.get<string>('REDIS_HOST') ?? '127.0.0.1',
-          port: Number(config.get<string>('REDIS_PORT') ?? 6379),
-          family: 4,
+          ...redisOptions(config),
           maxRetriesPerRequest: null,
           retryStrategy: (times: number) => Math.min(times * 1000, 10_000),
         },

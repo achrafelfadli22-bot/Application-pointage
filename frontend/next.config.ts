@@ -1,6 +1,10 @@
 import type { NextConfig } from 'next';
 
-const apiProxyUrl = (process.env.API_PROXY_URL ?? 'http://localhost:4000').replace(/\/$/, '');
+const configuredApiProxyUrl = process.env.API_PROXY_URL ?? 'http://localhost:4000';
+const apiProxyUrl = (configuredApiProxyUrl.includes('://')
+  ? configuredApiProxyUrl
+  : `http://${configuredApiProxyUrl}`
+).replace(/\/$/, '');
 
 const nextConfig: NextConfig = {
   transpilePackages: ['@pointage360/ui', '@pointage360/types'],

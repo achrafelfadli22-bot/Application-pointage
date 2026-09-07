@@ -1,0 +1,89 @@
+# Render Blueprint for evaluation/hobby use. Free services are not suitable for production.
+services:
+  - type: web
+    name: pointage360-web-free
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./docker/web.Dockerfile
+    dockerContext: .
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: /api
+      - key: API_PROXY_URL
+        fromService:
+          type: web
+          name: pointage360-api-free
+          property: hostport
+
+  - type: web
+    name: pointage360-api-free
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./docker/api.Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health/live
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: TRUST_PROXY
+        value: "true"
+      - key: SWAGGER_ENABLED
+        value: "false"
+      - key: PASSWORD_POLICY_STRICT
+        value: "true"
+      - key: WEB_ORIGIN
+        sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: pointage360-db-free
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: pointage360-redis-free
+          property: connectionString
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      - key: JWT_ACCESS_EXPIRES_IN
+        value: 15m
+      - key: JWT_REFRESH_EXPIRES_IN
+        value: 7d
+      - key: AUTH_CONTEXT_CACHE_ENABLED
+        value: "true"
+      - key: AUTH_CONTEXT_CACHE_TTL_SECONDS
+        value: "30"
+      - key: MINIO_ENDPOINT
+        sync: false
+      - key: MINIO_PORT
+        value: "443"
+      - key: MINIO_USE_SSL
+        value: "true"
+      - key: MINIO_ACCESS_KEY
+        sync: false
+      - key: MINIO_SECRET_KEY
+        sync: false
+      - key: MINIO_BUCKET
+        value: pointage360
+
+  - type: keyvalue
+    name: pointage360-redis-free
+    plan: free
+    region: frankfurt
+    ipAllowList: []
+    maxmemoryPolicy: allkeys-lru
+
+databases:
+  - name: pointage360-db-free
+    plan: free
+    region: frankfurt
+    databaseName: pointage360
+    user: pointage360
+    postgresMajorVersion: "16"
+    ipAllowList: []
