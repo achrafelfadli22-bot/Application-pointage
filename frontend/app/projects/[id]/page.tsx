@@ -161,7 +161,7 @@ function EditProjectModal({
                <FormField disabled={!isHR} label="Code projet" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
                <FormField disabled={!isHR} label="Nom du projet" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
                <SelectField disabled={!isHR} label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
-                <option value="">Non renseigne</option>
+                <option value="">Sélectionner un client (optionnel)</option>
                 {clientOptions.map((client) => (
                   <option key={client} value={client}>
                     {client}
@@ -170,7 +170,7 @@ function EditProjectModal({
               </SelectField>
                {isHR ? (
                  <SelectField label="Chef de projet" value={form.projectManagerId} onChange={(e) => setForm((p) => ({ ...p, projectManagerId: e.target.value }))}>
-                   <option value="">Selectionner</option>
+                   <option value="">Sélectionner un chef de projet</option>
                    {managerOptions.map((employee) => (
                      <option key={employee.user.id} value={employee.user.id}>
                        {employee.user.firstName} {employee.user.lastName}
@@ -284,7 +284,7 @@ function NewProjectSiteModal({
               <FormField label="Code site" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
               <FormField label="Nom du site" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
               <SelectField label="Chef de site" value={form.managerId} onChange={(e) => setForm((p) => ({ ...p, managerId: e.target.value }))}>
-                <option value="">Sélectionner</option>
+                <option value="">Sélectionner un chef de site</option>
                 {employees
                   .filter((employee) => employee.status === 'ACTIVE' && employee.user.status !== 'INACTIVE')
                   .map((employee) => (

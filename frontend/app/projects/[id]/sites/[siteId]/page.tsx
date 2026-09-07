@@ -177,7 +177,7 @@ function EditSiteModal({
                <FormField disabled={!isHR} label="Nom du site" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
                {isHR ? (
                  <SelectField label="Chef de site" value={form.managerId} onChange={(e) => setForm((p) => ({ ...p, managerId: e.target.value }))}>
-                   <option value="">Sélectionner</option>
+                   <option value="">Sélectionner un chef de site</option>
                    {managerOptions.map((employee) => (
                      <option key={employee.user.id} value={employee.user.id}>
                        {employee.user.firstName} {employee.user.lastName}

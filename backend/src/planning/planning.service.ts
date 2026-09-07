@@ -278,8 +278,8 @@ export class PlanningService {
       ...lines.map((line) => line.userId),
       ...editableAssignmentUserIds,
     ])];
-    const approvedLeaves = visibleUserIds.length
-      ? await this.prisma.leaveRequest.findMany({
+    const [approvedLeaves, holidays] = await Promise.all([
+      visibleUserIds.length ? this.prisma.leaveRequest.findMany({
           where: {
             tenantId: user.tenantId,
             userId: { in: visibleUserIds },
@@ -288,8 +288,16 @@ export class PlanningService {
             endDate: { gte: periodStart },
           },
           select: { userId: true, startDate: true, endDate: true },
-        })
-      : [];
+        }) : [],
+      this.prisma.holiday.findMany({
+        where: {
+          tenantId: user.tenantId,
+          date: { gte: periodStart, lte: periodEnd },
+        },
+        select: { id: true, name: true, date: true, country: true, isRecurring: true },
+        orderBy: { date: 'asc' },
+      }),
+    ]);
     return {
       id: `employee-period-${start}-${end}`,
       periodStart,
@@ -298,6 +306,7 @@ export class PlanningService {
       project: projectId ? lines.find((line) => line.site.project)?.site.project ?? null : null,
       lines,
       approvedLeaves,
+      holidays,
       permissions: { canAdd: managedSiteIds.size > 0 },
     };
   }

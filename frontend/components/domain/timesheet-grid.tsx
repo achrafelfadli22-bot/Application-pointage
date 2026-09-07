@@ -290,10 +290,10 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
     }
 
     const invalidRow = rows.find(
-      (row) => !row.taskName.trim() || !row.activity || (row.workLocation === 'SITE' && !row.siteId),
+      (row) => !row.activity || (row.workLocation === 'SITE' && !row.siteId),
     );
     if (invalidRow) {
-      return 'Chaque ligne doit avoir un type de tache, un site et une description.';
+      return 'Chaque ligne doit avoir un type de tâche et un site.';
     }
 
     const totalHours = rows.reduce(
@@ -560,7 +560,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                         value={row.projectId}
                         onChange={(event) => setProject(rowIndex, event.target.value)}
                       >
-                        <option value="">Projet</option>
+                        <option value="">Sélectionner un projet</option>
                         {availableProjects.map((project) => (
                           <option key={project.id} value={project.id}>
                             {project.code} - {project.name}
@@ -581,7 +581,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                         value={row.siteId}
                         onChange={(event) => setSite(rowIndex, event.target.value)}
                       >
-                        <option value="">Site</option>
+                        <option value="">Sélectionner un site</option>
                         {siteOptions.map((site) => (
                           <option key={site.id} value={site.id}>
                             {site.code} - {site.name}
@@ -616,7 +616,7 @@ export function TimesheetGrid({ timesheet, onRefresh }: { timesheet: Timesheet; 
                       <input
                         className="w-full rounded border border-transparent bg-transparent px-1 py-0.5 text-sm text-bodyText outline-none focus:border-accent focus:bg-white"
                         value={row.taskName}
-                        placeholder="Description manuelle"
+                        placeholder="Description (optionnelle)"
                         onChange={(event) => patchRow(rowIndex, { taskName: event.target.value })}
                       />
                     ) : (

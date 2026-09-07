@@ -104,7 +104,7 @@ function NewProjectModal({
               <FormField label="Code projet" value={form.code} onChange={(e) => setForm((p) => ({ ...p, code: e.target.value }))} />
               <FormField label="Nom du projet" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
               <SelectField label="Client / Maitre d'ouvrage" value={form.clientName} onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}>
-                <option value="">Non renseigne</option>
+                <option value="">Sélectionner un client (optionnel)</option>
                 {clientOptions.map((client) => (
                   <option key={client} value={client}>
                     {client}
@@ -112,7 +112,7 @@ function NewProjectModal({
                 ))}
               </SelectField>
               <SelectField label="Chef de projet" value={form.projectManagerId} onChange={(e) => setForm((p) => ({ ...p, projectManagerId: e.target.value }))}>
-                <option value="">Sélectionner</option>
+                <option value="">Sélectionner un chef de projet</option>
                 {employees
                   .filter((employee) => employee.status === 'ACTIVE' && employee.user.status !== 'INACTIVE')
                   .map((employee) => (

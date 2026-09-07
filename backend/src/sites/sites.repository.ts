@@ -18,6 +18,25 @@ export class SitesRepository {
     return this.prisma.site.create(args);
   }
 
+  createWithManagerAssignment(params: {
+    siteData: Prisma.SiteUncheckedCreateInput;
+    managerId: string;
+    assignmentStartDate: Date;
+  }) {
+    return this.prisma.$transaction(async (tx) => {
+      const site = await tx.site.create({ data: params.siteData });
+      await tx.siteAssignment.create({
+        data: {
+          tenantId: site.tenantId,
+          siteId: site.id,
+          userId: params.managerId,
+          startDate: params.assignmentStartDate,
+        },
+      });
+      return site;
+    });
+  }
+
   update<T extends Prisma.SiteUpdateArgs>(args: Prisma.SelectSubset<T, Prisma.SiteUpdateArgs>) {
     return this.prisma.site.update(args);
   }

@@ -98,8 +98,14 @@ export class SitesService {
     }
     await this.assertActiveEmployee(user.tenantId, dto.managerId);
 
-    const site = await this.repository.create({
-      data: {
+    const today = new Date();
+    const assignmentStartDate = new Date(Date.UTC(
+      today.getUTCFullYear(),
+      today.getUTCMonth(),
+      today.getUTCDate(),
+    ));
+    const site = await this.repository.createWithManagerAssignment({
+      siteData: {
         tenantId: user.tenantId,
         projectId: dto.projectId,
         code: dto.code,
@@ -107,6 +113,8 @@ export class SitesService {
         address: dto.address,
         managerId: dto.managerId,
       },
+      managerId: dto.managerId,
+      assignmentStartDate,
     });
 
     await this.auditLog.log({
@@ -115,7 +123,7 @@ export class SitesService {
       action: 'site.created',
       entityType: 'Site',
       entityId: site.id,
-      metadata: { code: site.code },
+      metadata: { code: site.code, managerId: dto.managerId, managerAssigned: true },
     });
 
     return site;

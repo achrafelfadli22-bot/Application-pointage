@@ -14,7 +14,7 @@ import { useApiData } from '@/lib/use-api-data';
 type Person = { id: string; firstName: string; lastName: string };
 type Site = { id: string; code: string; name: string; project?: { id: string; code: string; name: string } | null; assignments?: Array<{ user: Person }> };
 type Line = { id: string; userId: string; siteId: string; taskName: string; activity?: string | null; user: Person; site: Site; entries: Array<{ entryDate: string; hours: number }>; permissions: { canEdit: boolean } };
-type PeriodPlanning = { periodStart: string; periodEnd: string; lines: Line[]; approvedLeaves: Array<{ userId: string; startDate: string; endDate: string }>; permissions: { canAdd: boolean } };
+type PeriodPlanning = { periodStart: string; periodEnd: string; lines: Line[]; approvedLeaves: Array<{ userId: string; startDate: string; endDate: string }>; holidays: Array<{ id: string; name: string; date: string }>; permissions: { canAdd: boolean } };
 type EditLine = { key: string; editable: boolean; projectId: string; siteId: string; userId: string; projectLabel: string; siteLabel: string; userLabel: string; taskName: string; activity: string; hours: Record<string, number> };
 type TaskType = { value: string; label: string; isActive: boolean };
 
@@ -41,7 +41,7 @@ function PeriodContent() {
   const end = params?.get('end') ?? '';
   const { data, loading, error, refresh } = useApiData<PeriodPlanning>(
     () => api.planningMyPeriod(start, end) as Promise<PeriodPlanning>,
-    { periodStart: start, periodEnd: end, lines: [], approvedLeaves: [], permissions: { canAdd: false } },
+    { periodStart: start, periodEnd: end, lines: [], approvedLeaves: [], holidays: [], permissions: { canAdd: false } },
     { fallbackMode: 'never' },
   );
   const { data: scope, error: scopeError } = useApiData<{ sites: Site[] }>(
@@ -76,13 +76,14 @@ function PeriodContent() {
   const patch = (index: number, value: Partial<EditLine>) => setLines((current) => current.map((line, i) => i === index ? { ...line, ...value } : line));
   const employees = (siteId: string) => scope.sites.find((site) => site.id === siteId)?.assignments?.map((assignment) => assignment.user) ?? [];
   const onLeave = (userId: string, day: string) => data.approvedLeaves.some((leave) => leave.userId === userId && leave.startDate.slice(0, 10) <= day && leave.endDate.slice(0, 10) >= day);
+  const holidayFor = (day: string) => data.holidays.find((holiday) => holiday.date.slice(0, 10) === day);
 
   function addLine() {
     setLines((current) => [...current, { key: `new-${Date.now()}`, editable: true, projectId: '', siteId: '', userId: '', projectLabel: '', siteLabel: '', userLabel: '', taskName: '', activity: '', hours: Object.fromEntries(days.map((day) => [day, 0])) }]);
   }
   async function save() {
     const editable = lines.filter((line) => line.editable);
-    if (editable.some((line) => !line.siteId || !line.userId || !line.activity || !line.taskName.trim())) { setActionError('Le site, l’employé, la tâche et la description sont obligatoires.'); return; }
+    if (editable.some((line) => !line.siteId || !line.userId || !line.activity)) { setActionError('Le site, l’employé et la tâche sont obligatoires.'); return; }
     setBusy(true); setActionError(null); setSaved(false);
     try {
       await api.savePlanningPeriod({ periodStart: start, periodEnd: end, lines: editable.map((line) => ({
@@ -103,20 +104,21 @@ function PeriodContent() {
     <section className="overflow-hidden rounded-xl border border-borderSoft bg-surface shadow-card"><div className="overflow-x-auto">
       <table className="w-full min-w-[1250px] text-sm"><thead className="bg-grayCard text-left text-xs uppercase text-mutedText"><tr>
         <th className="p-3">Projet</th><th className="p-3">Site</th><th className="p-3">Employé</th><th className="p-3">Tâche</th><th className="p-3">Description</th>
-        {days.map((day) => <th key={day} className={`border-b border-borderSoft px-2 py-2.5 text-center text-xs font-semibold ${isWeekend(day) ? 'bg-grayCard text-hintText' : 'text-mutedText'}`}>
+        {days.map((day) => { const holiday = holidayFor(day); return <th key={day} title={holiday?.name} className={`border-b border-borderSoft px-2 py-2.5 text-center text-xs font-semibold ${holiday ? 'bg-amber-50 text-amber-700' : isWeekend(day) ? 'bg-grayCard text-hintText' : 'text-mutedText'}`}>
           <div className="capitalize">{dayDate(day).toLocaleDateString('fr-FR', { weekday: 'short' })}</div>
           <div className="font-normal normal-case text-hintText">{dayDate(day).toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' })}</div>
-        </th>)}<th className="p-3">Total</th><th />
+          {holiday && <span className="mt-1 block rounded border border-amber-200 bg-amber-100 px-1 text-[10px] font-semibold text-amber-700">Férié</span>}
+        </th>; })}<th className="p-3">Total</th><th />
       </tr></thead><tbody>
         {lines.map((line, index) => {
           const total = days.reduce((sum, day) => sum + (onLeave(line.userId, day) ? 0 : (line.hours[day] ?? 0)), 0);
           return <tr key={line.key} className={`border-t border-borderSoft ${line.editable ? '' : 'bg-grayCard/60 text-mutedText'}`}>
-            <td className="p-2">{line.editable ? <select value={line.projectId} onChange={(e) => patch(index, { projectId: e.target.value, siteId: '', userId: '' })} className="h-9 w-48 rounded border border-borderSoft px-2"><option value="">Projet</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}</select> : line.projectLabel}</td>
-            <td className="p-2">{line.editable ? <select value={line.siteId} disabled={!line.projectId} onChange={(e) => patch(index, { siteId: e.target.value, userId: '' })} className="h-9 w-48 rounded border border-borderSoft px-2 disabled:bg-grayCard"><option value="">Site</option>{scope.sites.filter((s) => s.project?.id === line.projectId).map((s) => <option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}</select> : line.siteLabel}</td>
-            <td className="p-2">{line.editable ? <select value={line.userId} disabled={!line.siteId} onChange={(e) => patch(index, { userId: e.target.value })} className="h-9 w-44 rounded border border-borderSoft px-2 disabled:bg-grayCard"><option value="">Employé</option>{employees(line.siteId).map((p) => <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}</select> : line.userLabel}</td>
-            <td className="p-2">{line.editable ? <select value={line.activity} onChange={(e) => patch(index, { activity: e.target.value })} className="h-9 w-44 rounded border border-borderSoft px-2"><option value="">Tâche</option>{activeTaskTypes.map((taskType) => <option key={taskType.value} value={taskType.value}>{taskType.label}</option>)}</select> : (taskTypeLabels[line.activity] ?? line.activity ?? '—')}</td>
-            <td className="p-2"><input value={line.taskName} disabled={!line.editable} placeholder="Description" onChange={(e) => patch(index, { taskName: e.target.value })} className="h-9 w-52 rounded border border-borderSoft px-2 disabled:bg-grayCard" /></td>
-            {days.map((day) => { const leave = onLeave(line.userId, day); return <td key={day} className={`p-1 text-center ${leave ? 'bg-sky-50' : isWeekend(day) ? 'bg-grayCard/80' : ''}`}><input type="number" min="0" max="24" step="0.5" disabled={!line.editable || leave} value={leave ? 0 : (line.hours[day] ?? 0)} onChange={(e) => patch(index, { hours: { ...line.hours, [day]: Math.max(0, Math.min(24, Number(e.target.value) || 0)) } })} className={`h-9 w-14 rounded border border-borderSoft text-center disabled:bg-grayCard ${isWeekend(day) && !leave ? 'bg-grayCard' : ''}`} />{leave && <span className="mt-1 block text-[10px] font-semibold text-sky-700">Congé</span>}</td>; })}
+            <td className="p-2">{line.editable ? <select value={line.projectId} onChange={(e) => patch(index, { projectId: e.target.value, siteId: '', userId: '' })} className="h-9 w-48 rounded border border-borderSoft px-2"><option value="">Sélectionner un projet</option>{projects.map((p) => <option key={p.id} value={p.id}>{p.code} - {p.name}</option>)}</select> : line.projectLabel}</td>
+            <td className="p-2">{line.editable ? <select value={line.siteId} disabled={!line.projectId} onChange={(e) => patch(index, { siteId: e.target.value, userId: '' })} className="h-9 w-48 rounded border border-borderSoft px-2 disabled:bg-grayCard"><option value="">Sélectionner un site</option>{scope.sites.filter((s) => s.project?.id === line.projectId).map((s) => <option key={s.id} value={s.id}>{s.code} - {s.name}</option>)}</select> : line.siteLabel}</td>
+            <td className="p-2">{line.editable ? <select value={line.userId} disabled={!line.siteId} onChange={(e) => patch(index, { userId: e.target.value })} className="h-9 w-44 rounded border border-borderSoft px-2 disabled:bg-grayCard"><option value="">Sélectionner un employé</option>{employees(line.siteId).map((p) => <option key={p.id} value={p.id}>{p.firstName} {p.lastName}</option>)}</select> : line.userLabel}</td>
+            <td className="p-2">{line.editable ? <select value={line.activity} onChange={(e) => patch(index, { activity: e.target.value })} className="h-9 w-44 rounded border border-borderSoft px-2"><option value="">Sélectionner une tâche</option>{activeTaskTypes.map((taskType) => <option key={taskType.value} value={taskType.value}>{taskType.label}</option>)}</select> : (taskTypeLabels[line.activity] ?? line.activity ?? '—')}</td>
+            <td className="p-2"><input value={line.taskName} disabled={!line.editable} placeholder="Description (optionnelle)" onChange={(e) => patch(index, { taskName: e.target.value })} className="h-9 w-52 rounded border border-borderSoft px-2 disabled:bg-grayCard" /></td>
+            {days.map((day) => { const leave = onLeave(line.userId, day); const holiday = holidayFor(day); return <td key={day} title={holiday?.name} className={`p-1 text-center ${holiday ? 'bg-amber-50/70' : leave ? 'bg-sky-50' : isWeekend(day) ? 'bg-grayCard/80' : ''}`}><input type="number" min="0" max="24" step="0.5" disabled={!line.editable || leave} value={leave ? 0 : (line.hours[day] ?? 0)} onChange={(e) => patch(index, { hours: { ...line.hours, [day]: Math.max(0, Math.min(24, Number(e.target.value) || 0)) } })} className={`h-9 w-14 rounded border border-borderSoft text-center disabled:bg-grayCard ${isWeekend(day) && !leave && !holiday ? 'bg-grayCard' : ''}`} />{holiday && <span className="mt-1 block text-[10px] font-semibold text-amber-700">Férié</span>}{leave && <span className="mt-1 block text-[10px] font-semibold text-sky-700">Congé</span>}</td>; })}
             <td className="p-2 text-center font-semibold">{total.toFixed(1)} h</td><td className="p-2">{line.editable && <button type="button" onClick={() => setLines((current) => current.filter((_, i) => i !== index))} className="rounded p-2 text-dangerText hover:bg-dangerBg"><Trash2 className="h-4 w-4" /></button>}</td>
           </tr>;
         })}
