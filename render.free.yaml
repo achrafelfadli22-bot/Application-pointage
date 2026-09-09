@@ -1,35 +1,18 @@
 # Render Blueprint for evaluation/hobby use. Free services are not suitable for production.
 services:
   - type: web
-    name: pointage360-web-free
+    name: pointage360-free
     runtime: docker
     plan: free
     region: frankfurt
-    dockerfilePath: ./docker/web.Dockerfile
-    dockerContext: .
-    healthCheckPath: /
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: NEXT_PUBLIC_API_URL
-        value: /api
-      - key: API_PROXY_URL
-        fromService:
-          type: web
-          name: pointage360-api-free
-          property: hostport
-
-  - type: web
-    name: pointage360-api-free
-    runtime: docker
-    plan: free
-    region: frankfurt
-    dockerfilePath: ./docker/api.Dockerfile
+    dockerfilePath: ./docker/render-free.Dockerfile
     dockerContext: .
     healthCheckPath: /api/health/live
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NEXT_PUBLIC_API_URL
+        value: /api
       - key: TRUST_PROXY
         value: "true"
       - key: SWAGGER_ENABLED
@@ -37,7 +20,7 @@ services:
       - key: PASSWORD_POLICY_STRICT
         value: "true"
       - key: WEB_ORIGIN
-        sync: false
+        value: https://pointage360-free.onrender.com
       - key: DATABASE_URL
         fromDatabase:
           name: pointage360-db-free
@@ -60,17 +43,19 @@ services:
       - key: AUTH_CONTEXT_CACHE_TTL_SECONDS
         value: "30"
       - key: MINIO_ENDPOINT
-        sync: false
+        value: 127.0.0.1
       - key: MINIO_PORT
-        value: "443"
+        value: "9000"
       - key: MINIO_USE_SSL
-        value: "true"
+        value: "false"
       - key: MINIO_ACCESS_KEY
-        sync: false
+        generateValue: true
       - key: MINIO_SECRET_KEY
-        sync: false
+        generateValue: true
       - key: MINIO_BUCKET
         value: pointage360
+      - key: MINIO_DATA_DIR
+        value: /var/data/minio
 
   - type: keyvalue
     name: pointage360-redis-free
