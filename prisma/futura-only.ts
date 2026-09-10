@@ -150,7 +150,7 @@ async function main() {
     });
   }
 
-  const hrPasswordHash = await bcrypt.hash('123456789', 12);
+  const hrPasswordHash = passwordHash;
   const hr = await prisma.user.upsert({
     where: { email: HR_EMAIL },
     update: {

@@ -24,6 +24,8 @@ services:
         value: "false"
       - key: PASSWORD_POLICY_STRICT
         value: "true"
+      - key: SEED_DEMO_ON_START
+        value: "false"
       - key: WEB_ORIGIN
         value: https://pointage360-free.onrender.com
       - key: DATABASE_URL

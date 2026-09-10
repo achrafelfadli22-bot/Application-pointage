@@ -8,6 +8,7 @@ services:
     dockerfilePath: ./docker/render-free.Dockerfile
     dockerContext: .
     healthCheckPath: /api/health/live
+    initialDeployHook: pnpm db:futura-only
     envVars:
       - key: NODE_ENV
         value: production
@@ -18,6 +19,10 @@ services:
       - key: SWAGGER_ENABLED
         value: "false"
       - key: PASSWORD_POLICY_STRICT
+        value: "true"
+      - key: DEMO_PASSWORD
+        value: "Password123!"
+      - key: SEED_DEMO_ON_START
         value: "true"
       - key: WEB_ORIGIN
         value: https://pointage360-free.onrender.com

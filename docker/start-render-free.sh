@@ -3,6 +3,10 @@ set -eu
 
 pnpm db:deploy
 
+if [ "${SEED_DEMO_ON_START:-false}" = "true" ]; then
+  pnpm db:futura-only
+fi
+
 minio_data_dir="${MINIO_DATA_DIR:-/var/data/minio}"
 mkdir -p "$minio_data_dir"
 
