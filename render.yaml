@@ -4,7 +4,7 @@ services:
   - type: web
     name: pointage360-free
     runtime: docker
-    plan: 1c-2g
+    plan: 0.5c-512mb
     region: frankfurt
     dockerfilePath: ./docker/render-free.Dockerfile
     dockerContext: .
@@ -66,18 +66,17 @@ services:
 
   - type: keyvalue
     name: pointage360-redis-free
-    plan: 256mb
+    plan: free
     region: frankfurt
     ipAllowList: []
     maxmemoryPolicy: allkeys-lru
-    persistenceMode: journal-snapshot
 
 databases:
   - name: pointage360-db-free
-    plan: 0.5c-1g
+    plan: 0.1c-256mb
     region: frankfurt
     databaseName: pointage360
     user: pointage360
     postgresMajorVersion: "16"
-    diskSizeGB: 15
+    diskSizeGB: 1
     ipAllowList: []

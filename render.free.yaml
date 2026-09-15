@@ -1,14 +1,18 @@
-# Render Blueprint for evaluation/hobby use. Free services are not suitable for production.
+# Paid Render configuration kept at this path so the existing Blueprint can
+# upgrade its current resources in place.
 services:
   - type: web
     name: pointage360-free
     runtime: docker
-    plan: free
+    plan: 0.5c-512mb
     region: frankfurt
     dockerfilePath: ./docker/render-free.Dockerfile
     dockerContext: .
     healthCheckPath: /api/health/live
-    initialDeployHook: pnpm db:futura-only
+    disk:
+      name: pointage360-files
+      mountPath: /var/data
+      sizeGB: 10
     envVars:
       - key: NODE_ENV
         value: production
@@ -20,10 +24,8 @@ services:
         value: "false"
       - key: PASSWORD_POLICY_STRICT
         value: "true"
-      - key: DEMO_PASSWORD
-        value: "Password123!"
       - key: SEED_DEMO_ON_START
-        value: "true"
+        value: "false"
       - key: WEB_ORIGIN
         value: https://pointage360-free.onrender.com
       - key: DATABASE_URL
@@ -71,9 +73,10 @@ services:
 
 databases:
   - name: pointage360-db-free
-    plan: free
+    plan: 0.1c-256mb
     region: frankfurt
     databaseName: pointage360
     user: pointage360
     postgresMajorVersion: "16"
+    diskSizeGB: 1
     ipAllowList: []
