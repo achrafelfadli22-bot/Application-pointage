@@ -9,6 +9,17 @@ const RESOURCE_MANAGER_EMAIL = 'a.elyoussefi@futura-expert.com';
 const HR_EMAIL = 'rh@futura-expert.com';
 
 async function main() {
+  // Free deployment bootstrap must never reset passwords or delete existing data.
+  const bootstrapOnly = process.env.DEMO_BOOTSTRAP_ONLY === 'true';
+  if (bootstrapOnly) {
+    if (await prisma.tenant.count() || await prisma.user.count()) {
+      console.log('Demo bootstrap skipped: database already initialized. Existing passwords unchanged.');
+      return;
+    }
+    if (!process.env.DEMO_PASSWORD || password.length < 12) {
+      throw new Error('Set DEMO_PASSWORD to at least 12 characters before bootstrapping the demo.');
+    }
+  }
   const passwordHash = await bcrypt.hash(password, 12);
 
   const enterprise = await prisma.subscriptionPlan.upsert({
@@ -55,7 +66,7 @@ async function main() {
     select: { id: true, name: true, slug: true },
   });
 
-  const deleteResult = await prisma.tenant.deleteMany({
+  const deleteResult = bootstrapOnly ? { count: 0 } : await prisma.tenant.deleteMany({
     where: { slug: { not: FUTURA_SLUG } },
   });
 
